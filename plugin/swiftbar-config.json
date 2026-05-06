@@ -1,10 +1,10 @@
 {
   "refresh_interval_ms": 500,
   "icons": {
-    "asking": "bubble.circle.fill",
+    "asking": "exclamationmark.bubble.circle.fill",
     "notify": "bell.circle.fill",
     "working": "hourglass.circle.fill",
-    "done": "circle.badge.checkmark",
+    "waiting": "circle.badge.checkmark",
     "idle": "circle",
     "none": "circle.dotted"
   },
@@ -12,7 +12,7 @@
     "asking",
     "notify",
     "working",
-    "done",
+    "waiting",
     "idle"
   ],
   "events": {
@@ -23,10 +23,10 @@
     "Notification": {
       "permission_prompt":  "asking",
       "elicitation_dialog": "asking",
-      "idle_prompt":        "notify",
+      "idle_prompt":        null,
       "auth_success":       "notify"
     },
-    "Stop":             "done",
+    "Stop":             "waiting",
     "SubagentStop":     null,
     "PreCompact":       null,
     "SessionEnd":       "end"

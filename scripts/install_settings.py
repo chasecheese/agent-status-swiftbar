@@ -49,7 +49,7 @@ DEFAULT_EVENTS = {
         "idle_prompt":        "notify",
         "auth_success":       "notify",
     },
-    "Stop":             "done",
+    "Stop":             "waiting",
     "SubagentStop":     None,
     "PreCompact":       None,
     "SessionEnd":       "end",

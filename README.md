@@ -13,7 +13,7 @@ Icons are pure SF Symbols — no color — so the menu bar adapts to light/dark 
 | `questionmark.circle.fill` | `asking`  | Claude is asking for permission / user input — **you must act**    |
 | `bell.circle.fill`         | `notify`  | Passive ping (response ready, idle reminder, auth, ...)            |
 | `timer.circle.fill`        | `working` | Claude is running                                                  |
-| `circle.badge.checkmark`   | `done`    | Claude finished its turn, ready for your next prompt               |
+| `circle.badge.checkmark`   | `waiting`    | Claude finished its turn, ready for your next prompt               |
 | `circle`                   | `idle`    | Session open, hasn't received any prompt yet                       |
 | `circle.dotted`            | `none`    | No active sessions                                                 |
 
@@ -65,11 +65,11 @@ Everything tunable lives in `~/.claude/swiftbar-config.json`:
     "asking":  "questionmark.circle.fill",
     "notify":  "bell.circle.fill",
     "working": "timer.circle.fill",
-    "done":    "circle.badge.checkmark",
+    "waiting": "circle.badge.checkmark",
     "idle":    "circle",
     "none":    "circle.dotted"
   },
-  "priority": ["asking", "notify", "working", "done", "idle"],
+  "priority": ["asking", "notify", "working", "waiting", "idle"],
   "events": {
     "SessionStart":     "idle",
     "UserPromptSubmit": "working",
@@ -81,7 +81,7 @@ Everything tunable lives in `~/.claude/swiftbar-config.json`:
       "idle_prompt":        "notify",
       "auth_success":       "notify"
     },
-    "Stop":             "done",
+    "Stop":             "waiting",
     "SubagentStop":     null,
     "PreCompact":       null,
     "SessionEnd":       "end"
