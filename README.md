@@ -168,7 +168,7 @@ Each state transition can trigger a macOS notification. **Out of the box no stat
 **Banner delivery**: macOS routes `osascript display notification` through the *Script Editor* host bundle, whose default style is often "None" (notifications go straight to Notification Center, no banner). Two ways to get a real banner:
 
 - One-time fix: System Settings → Notifications → Script Editor → set Alert style to **Banners** or **Alerts**.
-- Or `brew install terminal-notifier` — when present, the hook uses it instead of osascript and you grant banner permission to its own bundle ID.
+- Or `brew install terminal-notifier` — when present, the hook uses it instead of osascript. You grant banner permission to its own bundle ID, *and* clicking the banner jumps you back to the originating Terminal/iTerm tab (by `tty`) or VS Code/Cursor workspace window (by `--reuse-window <cwd>`); osascript notifications can't do click-to-focus.
 
 The dropdown's per-session submenu lets you toggle which states fire for each session (writes to that session's state file, so two sessions in the same project stay independent):
 

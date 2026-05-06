@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -415,6 +416,66 @@ def _osa_quote(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _osa_shell_command(*lines: str) -> str:
+    """Build a single shell command string that runs `osascript -e <line> ...`.
+
+    Each line is shell-quoted so the result is safe to embed in another
+    shell-string slot (notably terminal-notifier's ``-execute`` argument).
+    """
+    parts = [OSASCRIPT]
+    for line in lines:
+        parts.append("-e")
+        parts.append(shlex.quote(line))
+    return " ".join(parts)
+
+
+def click_command_shell(terminal_app: str, tty: str, cwd: str) -> str:
+    """Build a shell command that focuses the originating window/tab.
+
+    Used by ``terminal-notifier -execute`` so a notification click jumps
+    back to the right place. Returns ``""`` when no useful action is
+    available (e.g. unrecognised host or missing tty for tab focus).
+    """
+    if terminal_app == "Terminal" and tty:
+        return _osa_shell_command(
+            'tell application "Terminal"',
+            '  activate',
+            '  repeat with w in windows',
+            '    try',
+            f'      set t to (first tab of w whose tty is "{tty}")',
+            '      set frontmost of w to true',
+            '      set selected of t to true',
+            '      return',
+            '    end try',
+            '  end repeat',
+            'end tell',
+        )
+    if terminal_app == "iTerm" and tty:
+        return _osa_shell_command(
+            'tell application "iTerm"',
+            '  activate',
+            '  repeat with w in windows',
+            '    repeat with t in tabs of w',
+            '      repeat with s in sessions of t',
+            f'        if tty of s is "{tty}" then',
+            '          select t',
+            '          select w',
+            '          return',
+            '        end if',
+            '      end repeat',
+            '    end repeat',
+            '  end repeat',
+            'end tell',
+        )
+    if terminal_app in IDE_BIN and cwd:
+        bin_path = IDE_BIN[terminal_app]
+        if Path(bin_path).exists():
+            return f"{shlex.quote(bin_path)} --reuse-window {shlex.quote(cwd)}"
+    if terminal_app:
+        return _osa_shell_command(f'tell application "{terminal_app}" to activate')
+    return ""
+
+
 def effective_enabled_states(record: dict, notifications: dict) -> list[str]:
     """Enabled states for one session. Per-session override > global default.
 
@@ -451,12 +512,20 @@ def maybe_notify(new_state: str, prev_state: str, summary: str, cwd: str,
 
     # Prefer terminal-notifier when present — it ships its own bundle ID, so
     # macOS lets the user grant "Banners" / "Alerts" without having to dig
-    # into Script Editor's notification settings.
+    # into Script Editor's notification settings. It also supports `-execute`
+    # for click-to-focus, which osascript cannot do.
     tn = shutil.which("terminal-notifier")
     if tn:
         args = [tn, "-title", title, "-message", body]
         if notifications.get("sound"):
             args += ["-sound", sound_name]
+        click_cmd = click_command_shell(
+            (record.get("terminal_app") or "").strip(),
+            (record.get("tty") or "").strip(),
+            cwd,
+        )
+        if click_cmd:
+            args += ["-execute", click_cmd]
         try:
             subprocess.run(args, capture_output=True, timeout=3)
             return

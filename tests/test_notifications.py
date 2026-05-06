@@ -140,6 +140,69 @@ def test_maybe_notify_includes_sound_when_requested(monkeypatch):
     assert 'sound name "Glass"' in script
 
 
+def test_click_command_shell_terminal_uses_tty(tmp_path):
+    cmd = claudebar.click_command_shell("Terminal", "/dev/ttys015", "/tmp/foo")
+    assert cmd.startswith(claudebar.OSASCRIPT)
+    assert "/dev/ttys015" in cmd
+    assert 'tell application "Terminal"' in cmd
+
+
+def test_click_command_shell_iterm_uses_tty():
+    cmd = claudebar.click_command_shell("iTerm", "/dev/ttys020", "/tmp/foo")
+    assert "tty of s is" in cmd
+    assert "/dev/ttys020" in cmd
+
+
+def test_click_command_shell_vscode_uses_reuse_window(monkeypatch):
+    bin_path = claudebar.IDE_BIN["Visual Studio Code"]
+    monkeypatch.setattr(claudebar.Path, "exists", lambda self: True)
+    cmd = claudebar.click_command_shell("Visual Studio Code", "", "/projects/foo")
+    assert "--reuse-window" in cmd
+    assert "/projects/foo" in cmd
+    assert bin_path in cmd
+
+
+def test_click_command_shell_unknown_app_falls_back_to_activate():
+    cmd = claudebar.click_command_shell("Ghostty", "", "/tmp")
+    assert 'tell application "Ghostty" to activate' in cmd
+
+
+def test_click_command_shell_empty_when_nothing_known():
+    assert claudebar.click_command_shell("", "", "") == ""
+
+
+def test_maybe_notify_passes_execute_when_terminal_notifier_present(monkeypatch):
+    """terminal-notifier path must include -execute with the focus command."""
+    calls = []
+    monkeypatch.setattr(claudebar.shutil, "which",
+                        lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None)
+    monkeypatch.setattr(claudebar.subprocess, "run",
+                        lambda *a, **kw: calls.append((a, kw)))
+    record = {"terminal_app": "Terminal", "tty": "/dev/ttys001"}
+    claudebar.maybe_notify("asking", "working", "x", "/tmp", record,
+                           {"enabled_states": ["asking"]})
+    assert len(calls) == 1
+    argv = calls[0][0][0]
+    assert argv[0] == "/usr/local/bin/terminal-notifier"
+    # -execute appears with a non-empty value referencing the tty
+    assert "-execute" in argv
+    exec_idx = argv.index("-execute")
+    assert "/dev/ttys001" in argv[exec_idx + 1]
+
+
+def test_maybe_notify_skips_execute_when_no_terminal_app(monkeypatch):
+    calls = []
+    monkeypatch.setattr(claudebar.shutil, "which",
+                        lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None)
+    monkeypatch.setattr(claudebar.subprocess, "run",
+                        lambda *a, **kw: calls.append((a, kw)))
+    record = {"terminal_app": "", "tty": ""}
+    claudebar.maybe_notify("asking", "working", "x", "/tmp", record,
+                           {"enabled_states": ["asking"]})
+    argv = calls[0][0][0]
+    assert "-execute" not in argv
+
+
 def test_maybe_notify_escapes_quotes_in_summary(monkeypatch):
     calls = []
     monkeypatch.setattr(claudebar.subprocess, "run",
