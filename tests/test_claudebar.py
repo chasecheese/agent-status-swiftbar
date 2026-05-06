@@ -61,6 +61,132 @@ def test_load_config_handles_garbage_refresh_interval(tmp_path):
     assert claudebar.load_config(p)["refresh_interval_ms"] == claudebar.DEFAULT_REFRESH_INTERVAL_MS
 
 
+def test_load_config_full_mode_is_default(tmp_path):
+    cfg = claudebar.load_config(tmp_path / "missing.json")
+    assert cfg["mode"] == "full"
+    assert cfg["icons"] == claudebar.DEFAULT_ICONS_FULL
+    assert cfg["priority"] == claudebar.DEFAULT_PRIORITY_FULL
+    assert cfg["events"] == claudebar.DEFAULT_EVENTS_FULL
+
+
+def test_load_config_simple_mode_picks_simple_defaults(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({"mode": "simple"}))
+    cfg = claudebar.load_config(p)
+    assert cfg["mode"] == "simple"
+    assert cfg["icons"] == claudebar.DEFAULT_ICONS_SIMPLE
+    assert cfg["priority"] == claudebar.DEFAULT_PRIORITY_SIMPLE
+    assert cfg["events"]["SessionStart"] == "waiting"
+    # No notify state in simple mode → idle/auth notifications silenced
+    assert cfg["events"]["Notification"]["auth_success"] is None
+
+
+def test_load_config_unknown_mode_falls_back_to_full(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({"mode": "fancy"}))
+    cfg = claudebar.load_config(p)
+    assert cfg["mode"] == "full"
+
+
+def test_load_config_simple_mode_notifications_default(tmp_path):
+    """Simple mode's default enabled_states must not name a state that
+    doesn't exist in this mode (e.g. ``idle``)."""
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({"mode": "simple"}))
+    cfg = claudebar.load_config(p)
+    assert cfg["notifications"] == claudebar.DEFAULT_NOTIFICATIONS_SIMPLE
+    enabled = cfg["notifications"]["enabled_states"]
+    # Every default-enabled state must have an icon in this mode.
+    for s in enabled:
+        assert s in cfg["icons"], f"{s} enabled but not in simple icons"
+
+
+def test_load_config_simple_mode_filters_out_unknown_priority(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "mode": "simple",
+        "priority": ["asking", "idle", "notify", "working"],  # idle/notify don't exist
+    }))
+    cfg = claudebar.load_config(p)
+    assert cfg["priority"] == ["asking", "working"]
+
+
+def test_load_config_simple_mode_filters_user_enabled_states(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "mode": "simple",
+        "notifications": {"enabled_states": ["asking", "idle", "notify"]},
+    }))
+    cfg = claudebar.load_config(p)
+    # idle/notify don't exist in simple icons → filtered out.
+    assert cfg["notifications"]["enabled_states"] == ["asking"]
+
+
+def test_simple_mode_strips_user_icons_outside_vocabulary(tmp_path):
+    """Adding mode=simple to a config that still names full-mode states
+    must drop those — the user shouldn't have to clean up their icons
+    section to switch modes."""
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "mode": "simple",
+        "icons": {
+            "asking":  "exclamationmark.bubble.circle.fill",
+            "notify":  "bell.circle.fill",       # not in simple
+            "working": "hourglass.circle.fill",
+            "waiting": "circle.badge.checkmark",
+            "idle":    "circle",                  # not in simple
+            "none":    "circle.dotted",
+        },
+        "priority": ["asking", "notify", "working", "waiting", "idle"],
+        "events": {
+            "SessionStart": "idle",                      # idle not allowed
+            "Stop":         "waiting",
+            "Notification": {
+                "permission_prompt":  "asking",
+                "auth_success":       "notify",          # notify not allowed
+            },
+        },
+    }))
+    cfg = claudebar.load_config(p)
+    # icons confined to simple vocabulary
+    assert set(cfg["icons"]) == {"asking", "working", "waiting", "none"}
+    # priority filtered
+    assert cfg["priority"] == ["asking", "working", "waiting"]
+    # SessionStart fell back to simple default ("waiting") since user's value
+    # named a non-vocabulary state
+    assert cfg["events"]["SessionStart"] == "waiting"
+    # Stop kept as-is (waiting is in vocabulary)
+    assert cfg["events"]["Stop"] == "waiting"
+    # Notification: permission_prompt kept, auth_success dropped
+    notif_routes = cfg["events"]["Notification"]
+    assert notif_routes.get("permission_prompt") == "asking"
+    assert "auth_success" not in notif_routes
+
+
+def test_default_notifications_are_off_in_both_modes(tmp_path):
+    """Out of the box no state is enabled — opt-in via the dropdown."""
+    full = claudebar.load_config(tmp_path / "missing.json")
+    assert full["notifications"]["enabled_states"] == []
+    p = tmp_path / "simple.json"
+    p.write_text(json.dumps({"mode": "simple"}))
+    simple = claudebar.load_config(p)
+    assert simple["notifications"]["enabled_states"] == []
+
+
+def test_load_config_simple_mode_user_icons_merge(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "mode": "simple",
+        "icons": {"asking": "exclamationmark.triangle.fill"},
+    }))
+    cfg = claudebar.load_config(p)
+    assert cfg["icons"]["asking"] == "exclamationmark.triangle.fill"
+    # Unspecified simple-mode icons preserved
+    assert cfg["icons"]["working"] == claudebar.DEFAULT_ICONS_SIMPLE["working"]
+    # Full-only states absent — `notify` not present in simple mode
+    assert "notify" not in cfg["icons"]
+
+
 def test_load_config_handles_corrupt_json(tmp_path):
     p = tmp_path / "swiftbar-config.json"
     p.write_text("{ this is not json")

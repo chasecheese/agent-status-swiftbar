@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -30,14 +31,24 @@ SETTINGS_PATH = CLAUDE_DIR / "settings.json"
 SCRIPTS_DIR = CLAUDE_DIR / "scripts"
 HOOK_PATH = SCRIPTS_DIR / "claude-swiftbar-hook.py"
 PLUGIN_PY_PATH = SCRIPTS_DIR / "claude-swiftbar-plugin.py"
+TOGGLE_PATH = SCRIPTS_DIR / "claude-swiftbar-toggle.py"
 
 PYTHON = "/usr/bin/python3"
+OSASCRIPT = "/usr/bin/osascript"
 
 # ── Default state taxonomy ───────────────────────────────────────────────────
 DEFAULT_REFRESH_INTERVAL_MS = 1000
 MIN_REFRESH_INTERVAL_MS = 100
 
-DEFAULT_ICONS = {
+# ── Mode presets ─────────────────────────────────────────────────────────────
+# `mode` in swiftbar-config.json picks which preset is the base for icons /
+# priority / events; user-supplied keys then merge on top.
+#
+# "full"   — every state distinguished (default; backward-compatible)
+# "simple" — three live states only (asking / working / waiting); a fresh
+#            session starts as waiting. SessionStart, idle_prompt, and
+#            auth_success collapse into nearby states or get silenced.
+DEFAULT_ICONS_FULL = {
     "asking":  "exclamationmark.bubble.circle.fill",
     "notify":  "bell.circle.fill",
     "working": "hourglass.circle.fill",
@@ -45,7 +56,40 @@ DEFAULT_ICONS = {
     "idle":    "circle",
     "none":    "circle.dotted",
 }
-DEFAULT_PRIORITY = ["asking", "notify", "working", "waiting", "idle"]
+DEFAULT_PRIORITY_FULL = ["asking", "notify", "working", "waiting", "idle"]
+
+DEFAULT_ICONS_SIMPLE = {
+    "asking":  "exclamationmark.bubble.circle.fill",
+    "working": "hourglass.circle.fill",
+    "waiting": "circle.badge.checkmark",
+    "none":    "circle.dotted",
+}
+DEFAULT_PRIORITY_SIMPLE = ["asking", "working", "waiting"]
+
+# Backward-compat aliases (callers that imported these still work).
+DEFAULT_ICONS = DEFAULT_ICONS_FULL
+DEFAULT_PRIORITY = DEFAULT_PRIORITY_FULL
+
+# Per-mode desktop-notification defaults. The non-state fields (sound /
+# include_summary) are the same; only enabled_states differs because each
+# mode has a different state vocabulary.
+DEFAULT_NOTIFICATIONS_FULL = {
+    # No notifications enabled out of the box — opt in via the dropdown's
+    # per-session toggles (writes notify_states into that session's state).
+    "enabled_states":   [],
+    "sound":            False,
+    "sound_name":       "Glass",
+    "include_summary":  True,
+}
+DEFAULT_NOTIFICATIONS_SIMPLE = {
+    "enabled_states":   [],
+    "sound":            False,
+    "sound_name":       "Glass",
+    "include_summary":  True,
+}
+
+# Backward-compat alias.
+DEFAULT_NOTIFICATIONS = DEFAULT_NOTIFICATIONS_FULL
 
 # Full official Claude Code hook surface. install_settings.py iterates this so
 # disabling an event in the user config (set null) actually removes our prior
@@ -61,7 +105,7 @@ ALL_EVENTS = (
     "PreCompact",
     "SessionEnd",
 )
-DEFAULT_EVENTS = {
+DEFAULT_EVENTS_FULL = {
     "SessionStart":     "idle",
     "UserPromptSubmit": "working",
     "PreToolUse":       "working",
@@ -77,6 +121,33 @@ DEFAULT_EVENTS = {
     "PreCompact":       None,
     "SessionEnd":       "end",
 }
+DEFAULT_EVENTS_SIMPLE = {
+    "SessionStart":     "waiting",     # fresh session → waiting (not idle)
+    "UserPromptSubmit": "working",
+    "PreToolUse":       "working",
+    "PostToolUse":      "working",
+    "Notification": {
+        "permission_prompt":  "asking",
+        "elicitation_dialog": "asking",
+        "idle_prompt":        None,
+        "auth_success":       None,    # no notify state in simple mode
+    },
+    "Stop":             "waiting",
+    "SubagentStop":     None,
+    "PreCompact":       None,
+    "SessionEnd":       "end",
+}
+
+DEFAULT_MODE = "full"
+MODES = {
+    "full":   (DEFAULT_ICONS_FULL,   DEFAULT_PRIORITY_FULL,
+               DEFAULT_EVENTS_FULL,  DEFAULT_NOTIFICATIONS_FULL),
+    "simple": (DEFAULT_ICONS_SIMPLE, DEFAULT_PRIORITY_SIMPLE,
+               DEFAULT_EVENTS_SIMPLE, DEFAULT_NOTIFICATIONS_SIMPLE),
+}
+
+# Backward-compat alias.
+DEFAULT_EVENTS = DEFAULT_EVENTS_FULL
 STATE_LABELS = {
     "asking":  "ASKING",
     "notify":  "NOTIFY",
@@ -203,6 +274,36 @@ def latest_ai_title(transcript_path: str) -> str:
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
+def _filter_events(user_events: dict, allowed_states: set) -> dict:
+    """Strip user event entries that route to states outside this mode.
+
+    Strings: dropped if the named state isn't in this mode's vocabulary
+    (the special sentinels ``end`` and ``""``/``None`` are always kept).
+    Dicts (per-matcher routes): each matcher entry is kept iff its target
+    state is allowed. The whole event entry is preserved so legitimate
+    matchers can still take effect even when one is dropped.
+    """
+    out: dict = {}
+    for ev_name, value in user_events.items():
+        if value is None or value == "":
+            out[ev_name] = value
+        elif isinstance(value, str):
+            if value in allowed_states or value == "end":
+                out[ev_name] = value
+            # else: drop, fall back to base default
+        elif isinstance(value, dict):
+            cleaned = {}
+            for matcher, target in value.items():
+                if target is None or target == "":
+                    cleaned[matcher] = target
+                elif isinstance(target, str) and (target in allowed_states or target == "end"):
+                    cleaned[matcher] = target
+            out[ev_name] = cleaned
+        else:
+            out[ev_name] = value
+    return out
+
+
 def _coerce_interval(value) -> int:
     try:
         ms = int(value)
@@ -230,27 +331,55 @@ def load_config(path: Path | None = None) -> dict:
     except Exception:
         cfg = {}
 
-    icons = dict(DEFAULT_ICONS)
-    if isinstance(cfg.get("icons"), dict):
-        icons.update({k: v for k, v in cfg["icons"].items() if isinstance(v, str) and v})
+    mode = cfg.get("mode") if isinstance(cfg.get("mode"), str) else DEFAULT_MODE
+    if mode not in MODES:
+        mode = DEFAULT_MODE
+    base_icons, base_priority, base_events, base_notifications = MODES[mode]
+    allowed_states = set(base_icons)  # vocabulary for this mode
 
-    priority = list(DEFAULT_PRIORITY)
+    # User-supplied icon overrides only take effect for states this mode
+    # actually surfaces — keeps `mode: "simple"` strict even when the rest
+    # of the config still names full-mode states.
+    icons = dict(base_icons)
+    if isinstance(cfg.get("icons"), dict):
+        for k, v in cfg["icons"].items():
+            if isinstance(v, str) and v and k in allowed_states:
+                icons[k] = v
+
+    priority = list(base_priority)
     pr = cfg.get("priority")
     if isinstance(pr, list):
-        valid = [s for s in pr if isinstance(s, str) and s in icons and s != "none"]
+        valid = [s for s in pr if isinstance(s, str) and s in allowed_states and s != "none"]
         if valid:
             priority = valid
 
-    events = dict(DEFAULT_EVENTS)
+    events = dict(base_events)
     if isinstance(cfg.get("events"), dict):
-        events.update(cfg["events"])
+        events.update(_filter_events(cfg["events"], allowed_states))
+
+    notifications = dict(base_notifications)
+    if isinstance(cfg.get("notifications"), dict):
+        user_notif = cfg["notifications"]
+        states = user_notif.get("enabled_states")
+        if isinstance(states, list):
+            notifications["enabled_states"] = [
+                s for s in states if isinstance(s, str) and s in icons
+            ]
+        for key in ("sound", "include_summary"):
+            if isinstance(user_notif.get(key), bool):
+                notifications[key] = user_notif[key]
+        sound_name = user_notif.get("sound_name")
+        if isinstance(sound_name, str) and sound_name:
+            notifications["sound_name"] = sound_name
 
     return {
+        "mode": mode,
         "refresh_interval_ms": _coerce_interval(cfg.get("refresh_interval_ms",
                                                          DEFAULT_REFRESH_INTERVAL_MS)),
         "icons": icons,
         "priority": priority,
         "events": events,
+        "notifications": notifications,
     }
 
 
@@ -279,6 +408,68 @@ def read_state_files() -> list[dict]:
             continue
     now = int(time.time())
     return [r for r in records if now - int(r.get("since", 0) or 0) < STALE_AGE_S]
+
+
+def _osa_quote(s: str) -> str:
+    """Wrap a string as an AppleScript literal with proper escaping."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def effective_enabled_states(record: dict, notifications: dict) -> list[str]:
+    """Enabled states for one session. Per-session override > global default.
+
+    The override lives in the session's state file as ``notify_states``;
+    a list (even empty) is treated as authoritative. Missing / non-list
+    falls back to the global ``enabled_states``.
+    """
+    v = record.get("notify_states")
+    if isinstance(v, list):
+        return [s for s in v if isinstance(s, str)]
+    return list(notifications.get("enabled_states") or [])
+
+
+def maybe_notify(new_state: str, prev_state: str, summary: str, cwd: str,
+                 record: dict, notifications: dict) -> None:
+    """Fire a macOS desktop notification if this state transition is enabled.
+
+    Skips when state hasn't actually changed (avoids spam from PreToolUse /
+    PostToolUse rewriting the same state every tool call). Per-session
+    ``notify_states`` from ``record`` overrides the global default.
+    """
+    if not new_state or new_state == prev_state:
+        return
+    enabled = set(effective_enabled_states(record, notifications))
+    if new_state not in enabled:
+        return
+
+    title = f"Claude Code · {STATE_LABELS.get(new_state, new_state.upper())}"
+    body = ""
+    if notifications.get("include_summary", True):
+        body = (summary or (Path(cwd).name if cwd else "")).strip()
+    body = body[:160]
+    sound_name = notifications.get("sound_name", "Glass")
+
+    # Prefer terminal-notifier when present — it ships its own bundle ID, so
+    # macOS lets the user grant "Banners" / "Alerts" without having to dig
+    # into Script Editor's notification settings.
+    tn = shutil.which("terminal-notifier")
+    if tn:
+        args = [tn, "-title", title, "-message", body]
+        if notifications.get("sound"):
+            args += ["-sound", sound_name]
+        try:
+            subprocess.run(args, capture_output=True, timeout=3)
+            return
+        except Exception:
+            pass  # fall through to osascript
+
+    script = f"display notification {_osa_quote(body)} with title {_osa_quote(title)}"
+    if notifications.get("sound"):
+        script += f" sound name {_osa_quote(sound_name)}"
+    try:
+        subprocess.run([OSASCRIPT, "-e", script], capture_output=True, timeout=3)
+    except Exception:
+        pass
 
 
 def aggregate_state(records: list[dict], priority: list[str]) -> str:

@@ -14,8 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from claudebar import (  # noqa: E402
-    IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS, SUMMARY_MAX_LEN,
-    aggregate_state, load_config, read_state_files,
+    IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS, SUMMARY_MAX_LEN, TOGGLE_PATH,
+    aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
 
 
@@ -99,7 +99,28 @@ def render_header(records: list[dict], icons: dict, priority: list[str]) -> None
     print(f"| sfimage={icons.get(agg, 'circle')}")
 
 
-def render_row(r: dict, now: int, icons: dict) -> None:
+def render_notify_toggles(record: dict, priority: list[str],
+                          notifications: dict) -> None:
+    """Per-session notification toggles. Writes to the session's state file."""
+    session_id = (record.get("session_id") or "").strip()
+    if not session_id:
+        return
+    enabled = set(effective_enabled_states(record, notifications))
+    print("-- Notify on: | color=gray size=11")
+    for state in priority:
+        on = state in enabled
+        mark = "✓" if on else "  "
+        label = STATE_LABELS.get(state, state)
+        print(
+            f"-- {mark} {label} | "
+            f"bash='{TOGGLE_PATH}' param1='--session' param2='{session_id}' "
+            f"param3='--state' param4='{state}' "
+            f"refresh=true terminal=false"
+        )
+
+
+def render_row(r: dict, now: int, icons: dict, priority: list[str],
+               notifications: dict) -> None:
     state = r.get("state", "?")
     cwd = r.get("cwd", "") or ""
     short_cwd = Path(cwd).name if cwd else ""
@@ -131,6 +152,8 @@ def render_row(r: dict, now: int, icons: dict) -> None:
         print(f"-- {msg.replace(chr(10), ' ')[:MESSAGE_MAX_LEN]} | color=gray size=11")
     if cwd:
         print(f"-- Open folder | bash='/usr/bin/open' param1='{cwd}' terminal=false")
+    print("-- ---")
+    render_notify_toggles(r, priority, notifications)
 
 
 def main() -> None:
@@ -145,7 +168,7 @@ def main() -> None:
     else:
         now = int(time.time())
         for r in records:
-            render_row(r, now, cfg["icons"])
+            render_row(r, now, cfg["icons"], cfg["priority"], cfg["notifications"])
 
     print("---")
     print("Refresh | refresh=true")

@@ -20,6 +20,7 @@ rm -f "$plugin_dir"/claude-status.*.sh
 echo "==> Removing scripts under ~/.claude/scripts"
 rm -f "$HOME/.claude/scripts/claude-swiftbar-hook.py"
 rm -f "$HOME/.claude/scripts/claude-swiftbar-plugin.py"
+rm -f "$HOME/.claude/scripts/claude-swiftbar-toggle.py"
 rm -f "$HOME/.claude/scripts/claudebar.py"
 
 echo "==> Refreshing SwiftBar"

@@ -51,6 +51,9 @@ install -m 0755 "$REPO_DIR/hook/claude-swiftbar-hook.py" "$claude_scripts/claude
 echo "==> Installing plugin entry -> $claude_scripts/claude-swiftbar-plugin.py"
 install -m 0755 "$REPO_DIR/plugin/claude-status.py" "$claude_scripts/claude-swiftbar-plugin.py"
 
+echo "==> Installing toggle helper -> $claude_scripts/claude-swiftbar-toggle.py"
+install -m 0755 "$REPO_DIR/plugin/toggle.py" "$claude_scripts/claude-swiftbar-toggle.py"
+
 config_src="$REPO_DIR/plugin/swiftbar-config.json"
 config_dst="$HOME/.claude/swiftbar-config.json"
 if [ -f "$config_dst" ] && ! cmp -s "$config_src" "$config_dst"; then

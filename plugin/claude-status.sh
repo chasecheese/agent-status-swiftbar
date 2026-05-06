@@ -7,6 +7,7 @@
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
+# <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
 
 # Thin wrapper. The real plugin logic lives in claude-swiftbar-plugin.py
 # (deployed alongside the hook by install.sh) so the file SwiftBar reads
