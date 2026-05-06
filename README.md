@@ -2,17 +2,26 @@
 
 A tiny [SwiftBar](https://swiftbar.app) plugin that turns the macOS menu bar into a status light for [Claude Code](https://claude.com/claude-code) sessions.
 
-- 🔴 **Waiting** — Claude is asking for your input or permission
-- 🟡 **Working** — Claude is doing something
-- 🟢 **Done** — Claude finished its turn
-- ⚪ **Idle** — session open, no active turn
-- ⚫ **Off** — no active sessions
+The icon shows the most-urgent state across all your active Claude Code windows. Click it for per-session details and one-click "open folder" entries.
 
-Multiple Claude Code windows? The icon shows the count and uses the most-urgent state across all of them. Click the icon to see one line per session (state, folder, age) with a one-click "Open folder" entry.
+## States
 
-## Why?
+Icons are pure SF Symbols — no color — so the menu bar adapts to light/dark automatically. Defaults:
 
-If you let Claude Code run for a few minutes per turn, you probably tab away. The menu bar icon tells you when to come back — without flipping through windows.
+| Default symbol             | State     | Means                                                              |
+| -------------------------- | --------- | ------------------------------------------------------------------ |
+| `questionmark.circle.fill` | `asking`  | Claude is asking for permission / user input — **you must act**    |
+| `bell.circle.fill`         | `notify`  | Passive ping (response ready, idle reminder, auth, ...)            |
+| `timer.circle.fill`        | `working` | Claude is running                                                  |
+| `circle.badge.checkmark`   | `done`    | Claude finished its turn, ready for your next prompt               |
+| `circle`                   | `idle`    | Session open, hasn't received any prompt yet                       |
+| `circle.dotted`            | `none`    | No active sessions                                                 |
+
+All icons / priority / hook routing are editable in `~/.claude/swiftbar-config.json` — see [Configuration](#configuration).
+
+## Why
+
+If a Claude Code turn takes more than a few seconds you tab away. The menu bar tells you when to come back — without flipping windows.
 
 ## Requirements
 
@@ -29,35 +38,68 @@ cd claude-code-swiftbar
 ./install.sh
 ```
 
-The installer:
-1. Copies `hook/claude-swiftbar-hook.py` to `~/.claude/scripts/`.
-2. Copies `plugin/claude-status.2s.sh` to your SwiftBar plugin folder (auto-detected, override with `SWIFTBAR_PLUGIN_DIR=/path ./install.sh`).
-3. Patches `~/.claude/settings.json` to register five hooks (a backup is written to `settings.json.bak`).
-4. Asks SwiftBar to reload.
+The installer is idempotent. It:
 
-It's idempotent and preserves any other hooks you already have on the same events.
+1. Copies `hook/claude-swiftbar-hook.py` → `~/.claude/scripts/`.
+2. Copies `plugin/claude-status.2s.sh` → your SwiftBar plugin folder (auto-detected; override with `SWIFTBAR_PLUGIN_DIR=/path ./install.sh`).
+3. Syncs `plugin/swiftbar-config.json` → `~/.claude/swiftbar-config.json` (backs up the existing file when it differs, as `.bak`).
+4. Patches `~/.claude/settings.json` to register hook entries (backs up the previous file).
+5. Tells SwiftBar to refresh.
+
+Other tools' hooks on the same events are preserved.
 
 ## How it works
 
-| Hook event         | State written |
-| ------------------ | ------------- |
-| `SessionStart`     | `idle`        |
-| `UserPromptSubmit` | `working`     |
-| `Stop`             | `done`        |
-| `Notification`     | `waiting`     |
-| `SessionEnd`       | (file deleted) |
+Each wired-up Claude Code hook event runs `claude-swiftbar-hook.py <state>`, which writes `~/.claude/state/swiftbar/<session_id>.json`. The SwiftBar plugin polls that directory every two seconds, picks the highest-priority state across sessions, and renders a single SF Symbol.
 
-Each hook fires `claude-swiftbar-hook.py <state>`, which writes `~/.claude/state/swiftbar/<session_id>.json`. The SwiftBar plugin polls that directory every two seconds, picks the highest-priority state, and renders.
+State files older than 12 hours are ignored (handles the case where Claude Code crashes and skips `SessionEnd`).
 
-State files older than 12 hours are ignored (handles the case where a Claude Code crash skips `SessionEnd`).
+## Configuration
 
-## Customizing
+Everything tunable lives in `~/.claude/swiftbar-config.json`:
 
-- **Refresh interval** — rename `claude-status.2s.sh` to `claude-status.5s.sh` (or `1s`, `1m`, etc.). SwiftBar reads the cadence from the filename.
-- **Icons / colors** — edit the `ICONS` and `COLORS` dicts at the top of `plugin/claude-status.2s.sh`. The icons are SF Symbol names; any symbol from [SF Symbols.app](https://developer.apple.com/sf-symbols/) works.
-- **State priority** — change the `PRIORITY` list in the same file.
+```json
+{
+  "refresh_interval_ms": 500,
+  "icons": {
+    "asking":  "questionmark.circle.fill",
+    "notify":  "bell.circle.fill",
+    "working": "timer.circle.fill",
+    "done":    "circle.badge.checkmark",
+    "idle":    "circle",
+    "none":    "circle.dotted"
+  },
+  "priority": ["asking", "notify", "working", "done", "idle"],
+  "events": {
+    "SessionStart":     "idle",
+    "UserPromptSubmit": "working",
+    "PreToolUse":       "working",
+    "PostToolUse":      null,
+    "Notification": {
+      "permission_prompt":  "asking",
+      "elicitation_dialog": "asking",
+      "idle_prompt":        "notify",
+      "auth_success":       "notify"
+    },
+    "Stop":             "done",
+    "SubagentStop":     null,
+    "PreCompact":       null,
+    "SessionEnd":       "end"
+  }
+}
+```
 
-After editing, run `open -g "swiftbar://refreshallplugins"` (or click the SwiftBar icon → Refresh All) to reload.
+- **`refresh_interval_ms`** — how often SwiftBar re-runs the plugin, in milliseconds. Floored at 100ms. Encoded into the plugin filename (e.g. `claude-status.0.5s.sh`) by `install.sh`; you have to re-run the installer for changes to this key to take effect.
+- **`icons`** — state name → [SF Symbol](https://developer.apple.com/sf-symbols/) name.
+- **`priority`** — ordered list used to pick the header icon when multiple sessions are active. Earlier = higher priority. `none` is the implicit fallback.
+- **`events`** — every official Claude Code [hook event](https://code.claude.com/docs/en/hooks.md). Each entry can be:
+  - a **string** state name → single `matcher=""` route;
+  - a **dict** of `matcher → state` → per-subtype routing (e.g. `Notification`, or per-tool `PreToolUse`);
+  - `null` / `""` → unwired (any prior wiring of ours is removed on next install).
+
+You can introduce custom state names — just add them to `icons`, slot them into `priority`, and point an event at them.
+
+After editing, run `./install.sh` again. Icons and priority are re-read on every tick (changes apply within one refresh cycle); `events` and `refresh_interval_ms` are baked into `~/.claude/settings.json` and the plugin filename respectively, so they need a re-install.
 
 ## Uninstall
 
@@ -65,7 +107,7 @@ After editing, run `open -g "swiftbar://refreshallplugins"` (or click the SwiftB
 ./uninstall.sh
 ```
 
-Removes the plugin, the hook script, and the hook entries in `settings.json`. State files in `~/.claude/state/swiftbar/` are left alone — `rm -rf ~/.claude/state/swiftbar` to clean those up too.
+Removes the plugin, the hook script, and our entries in `settings.json`. Config (`~/.claude/swiftbar-config.json`) and state files (`~/.claude/state/swiftbar/`) are left in place; the script prints the commands to wipe them if you want.
 
 ## Related projects
 
@@ -73,7 +115,7 @@ Removes the plugin, the hook script, and the hook entries in `settings.json`. St
 - [VibeStatus](https://www.vibestatus.app) — closed-source paid menu bar app with push notifications.
 - [PiXeL16/claudecode-macmenu](https://github.com/PiXeL16/claudecode-macmenu) — menu bar app with usage analytics.
 
-This project is the "thirty lines of Python in a SwiftBar plugin" version of the same idea, for people who already use SwiftBar and want something they can hack on.
+This project is the "small SwiftBar plugin you can hack on" version of the same idea.
 
 ## License
 

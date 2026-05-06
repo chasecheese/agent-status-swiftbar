@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <bitbar.title>Claude Code Status</bitbar.title>
-# <bitbar.version>0.1</bitbar.version>
+# <bitbar.version>0.5</bitbar.version>
 # <bitbar.author>local</bitbar.author>
 # <bitbar.desc>Aggregate state across active Claude Code sessions.</bitbar.desc>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
@@ -14,22 +14,39 @@ import time
 from pathlib import Path
 
 STATE_DIR = Path.home() / ".claude" / "state" / "swiftbar"
+CONFIG_PATH = Path.home() / ".claude" / "swiftbar-config.json"
 
-ICONS = {
-    "waiting": ":exclamationmark.circle.fill:",
-    "working": ":hourglass:",
-    "done":    ":checkmark.circle.fill:",
-    "idle":    ":circle:",
-    "none":    ":circle.dotted:",
+DEFAULT_ICONS = {
+    "asking": "exclamationmark.circle.fill",
+    "notify":  "bell.circle.fill",
+    "working": "hourglass",
+    "done":    "checkmark.circle.fill",
+    "idle":    "circle",
+    "none":    "circle.dotted",
 }
-COLORS = {
-    "waiting": "#ff453a",
-    "working": "#ffd60a",
-    "done":    "#30d158",
-    "idle":    "#8e8e93",
-    "none":    "#8e8e93",
-}
-PRIORITY = ["waiting", "working", "done", "idle"]
+DEFAULT_PRIORITY = ["asking", "notify", "working", "done", "idle"]
+
+
+def load_config():
+    icons = dict(DEFAULT_ICONS)
+    priority = list(DEFAULT_PRIORITY)
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text())
+    except Exception:
+        return icons, priority
+    if isinstance(cfg, dict):
+        ic = cfg.get("icons")
+        if isinstance(ic, dict):
+            icons.update({k: v for k, v in ic.items() if isinstance(v, str) and v})
+        pr = cfg.get("priority")
+        if isinstance(pr, list):
+            valid = [s for s in pr if isinstance(s, str) and s in icons and s != "none"]
+            if valid:
+                priority = valid
+    return icons, priority
+
+
+ICONS, PRIORITY = load_config()
 
 records = []
 if STATE_DIR.exists():
@@ -50,17 +67,11 @@ for s in PRIORITY:
         agg = s
         break
 
-count = len(records)
-header_icon = ICONS[agg]
-header_color = COLORS[agg]
-header_text = f"{count}" if count > 1 else ""
-header = f"{header_text} | sfimage={header_icon[1:-1]} color={header_color}"
-print(header.strip())
-
+print(f"| sfimage={ICONS.get(agg, 'circle')}")
 print("---")
 
 if not records:
-    print("No active Claude Code sessions | color=gray")
+    print("No active Claude Code sessions")
 else:
     def humanage(ts):
         s = max(0, now - int(ts or 0))
@@ -71,7 +82,8 @@ else:
         return f"{s // 3600}h"
 
     state_label = {
-        "waiting": "WAITING",
+        "asking": "ASKING",
+        "notify":  "NOTIFY",
         "working": "WORKING",
         "done":    "DONE",
         "idle":    "IDLE",
@@ -84,13 +96,10 @@ else:
         since = r.get("since", 0)
         label = state_label.get(state, state)
         line = f"{label}  {short_cwd}  ({humanage(since)} ago)"
-        # SwiftBar params: avoid pipe in body
         line = line.replace("|", "/")
-        params = [f"color={COLORS.get(state, '#8e8e93')}"]
+        params = [f"sfimage={ICONS.get(state, 'circle')}"]
         if cwd:
             params.append(f"href=file://{cwd}")
-        sfsym = ICONS.get(state, ":circle:")[1:-1]
-        params.append(f"sfimage={sfsym}")
         print(f"{line} | {' '.join(params)}")
         if msg:
             short = msg.replace("\n", " ")[:120]

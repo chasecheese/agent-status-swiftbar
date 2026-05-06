@@ -15,7 +15,7 @@ echo "==> Removing hooks from ~/.claude/settings.json"
 /usr/bin/python3 "$REPO_DIR/scripts/uninstall_settings.py"
 
 echo "==> Removing plugin from $plugin_dir"
-rm -f "$plugin_dir/claude-status.2s.sh"
+rm -f "$plugin_dir"/claude-status.*.sh
 
 echo "==> Removing hook script"
 rm -f "$HOME/.claude/scripts/claude-swiftbar-hook.py"
@@ -25,7 +25,7 @@ open -g "swiftbar://refreshallplugins" >/dev/null 2>&1 || true
 
 cat <<EOF
 
-Done. State files in ~/.claude/state/swiftbar/ were left in place.
-Remove them with:
+Done. State files and config left in place. To wipe them too:
   rm -rf ~/.claude/state/swiftbar
+  rm -f  ~/.claude/swiftbar-config.json
 EOF
