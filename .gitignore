@@ -1,6 +1,6 @@
-.DS_Store
-*.bak
-*.swp
-*.swo
+.venv/
+.uv-cache/
 __pycache__/
 *.pyc
+.pytest_cache/
+.DS_Store

@@ -17,8 +17,10 @@ echo "==> Removing hooks from ~/.claude/settings.json"
 echo "==> Removing plugin from $plugin_dir"
 rm -f "$plugin_dir"/claude-status.*.sh
 
-echo "==> Removing hook script"
+echo "==> Removing scripts under ~/.claude/scripts"
 rm -f "$HOME/.claude/scripts/claude-swiftbar-hook.py"
+rm -f "$HOME/.claude/scripts/claude-swiftbar-plugin.py"
+rm -f "$HOME/.claude/scripts/claudebar.py"
 
 echo "==> Refreshing SwiftBar"
 open -g "swiftbar://refreshallplugins" >/dev/null 2>&1 || true

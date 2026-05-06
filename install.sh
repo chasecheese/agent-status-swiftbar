@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # Install claude-code-swiftbar.
 #
-# Copies the SwiftBar plugin and the hook script into place, then patches
-# ~/.claude/settings.json to register the hooks. Re-running is safe (the
-# settings patcher is idempotent and backs up settings.json before writing).
+# Deploys (in order):
+#   ~/.claude/scripts/claudebar.py                  shared lib
+#   ~/.claude/scripts/claude-swiftbar-hook.py       hook entry
+#   ~/.claude/scripts/claude-swiftbar-plugin.py     plugin entry
+#   ~/.claude/swiftbar-config.json                  user config (preserves edits via .bak)
+#   <SwiftBar plugin dir>/claude-status.<interval>.sh   bash wrapper SwiftBar runs
+#   ~/.claude/settings.json                         (patched: our hook routes wired in)
 #
-# Override the SwiftBar plugin folder by exporting SWIFTBAR_PLUGIN_DIR.
+# Idempotent. Override the SwiftBar plugin folder with SWIFTBAR_PLUGIN_DIR.
 
 set -euo pipefail
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PY=/usr/bin/python3
+LIB="$REPO_DIR/lib"
 
 echo "==> Checking SwiftBar"
 if [ ! -d "/Applications/SwiftBar.app" ]; then
@@ -33,12 +39,17 @@ if [ -z "$plugin_dir" ]; then
   echo "    SwiftBar PluginDirectory pref not set; defaulting to $plugin_dir"
 fi
 
-mkdir -p "$plugin_dir"
-mkdir -p "$HOME/.claude/scripts"
-mkdir -p "$HOME/.claude/state/swiftbar"
+claude_scripts="$HOME/.claude/scripts"
+mkdir -p "$plugin_dir" "$claude_scripts" "$HOME/.claude/state/swiftbar"
 
-echo "==> Installing hook -> ~/.claude/scripts/claude-swiftbar-hook.py"
-install -m 0755 "$REPO_DIR/hook/claude-swiftbar-hook.py" "$HOME/.claude/scripts/claude-swiftbar-hook.py"
+echo "==> Installing shared lib -> $claude_scripts/claudebar.py"
+install -m 0644 "$LIB/claudebar.py" "$claude_scripts/claudebar.py"
+
+echo "==> Installing hook -> $claude_scripts/claude-swiftbar-hook.py"
+install -m 0755 "$REPO_DIR/hook/claude-swiftbar-hook.py" "$claude_scripts/claude-swiftbar-hook.py"
+
+echo "==> Installing plugin entry -> $claude_scripts/claude-swiftbar-plugin.py"
+install -m 0755 "$REPO_DIR/plugin/claude-status.py" "$claude_scripts/claude-swiftbar-plugin.py"
 
 config_src="$REPO_DIR/plugin/swiftbar-config.json"
 config_dst="$HOME/.claude/swiftbar-config.json"
@@ -50,30 +61,22 @@ elif [ ! -f "$config_dst" ]; then
 fi
 install -m 0644 "$config_src" "$config_dst"
 
-# Plugin filename encodes the refresh interval (SwiftBar reads it from the name).
-# Use 'ms' for sub-second / non-multiple-of-1000 intervals, 's' otherwise.
-# (SwiftBar reliably parses both; '0.5s' is not honored uniformly.)
-plugin_name=$(/usr/bin/python3 - <<PY
-import json
-try:
-    cfg = json.load(open("$config_src"))
-    ms = max(100, int(cfg.get("refresh_interval_ms", 1000)))
-except Exception:
-    ms = 1000
-suffix = f"{ms // 1000}s" if ms % 1000 == 0 else f"{ms}ms"
-print(f"claude-status.{suffix}.sh")
-PY
-)
+# Plugin filename encodes refresh interval — SwiftBar parses it from the name.
+plugin_name=$("$PY" -c "
+import sys; sys.path.insert(0, '$LIB')
+from claudebar import load_config, plugin_filename_for
+print(plugin_filename_for(load_config()['refresh_interval_ms']))
+")
 plugin_dst="$plugin_dir/$plugin_name"
 
-# Strip any prior install (the interval suffix may have changed).
+# Strip any prior install (refresh interval may have changed → different filename).
 find "$plugin_dir" -maxdepth 1 -name 'claude-status.*.sh' ! -name "$plugin_name" -delete 2>/dev/null || true
 
-echo "==> Installing plugin -> $plugin_dst"
-install -m 0755 "$REPO_DIR/plugin/claude-status.2s.sh" "$plugin_dst"
+echo "==> Installing plugin wrapper -> $plugin_dst"
+install -m 0755 "$REPO_DIR/plugin/claude-status.sh" "$plugin_dst"
 
 echo "==> Wiring hooks into ~/.claude/settings.json"
-/usr/bin/python3 "$REPO_DIR/scripts/install_settings.py"
+"$PY" "$REPO_DIR/scripts/install_settings.py"
 
 echo "==> Refreshing SwiftBar"
 open -g "swiftbar://refreshallplugins" >/dev/null 2>&1 || true

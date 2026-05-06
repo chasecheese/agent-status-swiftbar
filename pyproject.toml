@@ -1,0 +1,22 @@
+[project]
+name = "claude-code-swiftbar"
+version = "0.6.0"
+description = "SwiftBar plugin: macOS menu-bar status light for Claude Code sessions."
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+# Runtime deps: none — all production code uses the stdlib only, so the
+# deployed scripts run fine under /usr/bin/python3.
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["lib"]
+addopts = "-q"
