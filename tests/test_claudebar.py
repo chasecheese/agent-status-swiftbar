@@ -26,7 +26,7 @@ def test_load_config_missing_returns_defaults(tmp_path):
     cfg = claudebar.load_config(tmp_path / "nope.json")
     assert cfg["icons"] == claudebar.DEFAULT_ICONS
     assert cfg["priority"] == claudebar.DEFAULT_PRIORITY
-    assert cfg["events"] == claudebar.DEFAULT_EVENTS
+    assert cfg["claude_events"] == claudebar.DEFAULT_EVENTS
     assert cfg["refresh_interval_ms"] == claudebar.DEFAULT_REFRESH_INTERVAL_MS
 
 
@@ -65,10 +65,10 @@ def test_load_config_returns_defaults_when_file_missing(tmp_path):
     cfg = claudebar.load_config(tmp_path / "missing.json")
     assert cfg["icons"] == claudebar.DEFAULT_ICONS
     assert cfg["priority"] == claudebar.DEFAULT_PRIORITY
-    assert cfg["events"] == claudebar.DEFAULT_EVENTS
+    assert cfg["claude_events"] == claudebar.DEFAULT_EVENTS
     assert cfg["notifications"] == claudebar.DEFAULT_NOTIFICATIONS
-    # Default events seed a fresh session straight to waiting.
-    assert cfg["events"]["SessionStart"] == "waiting"
+    # Default claude_events seed a fresh session straight to waiting.
+    assert cfg["claude_events"]["SessionStart"] == "waiting"
 
 
 def test_load_config_filters_legacy_state_names(tmp_path):
@@ -79,21 +79,33 @@ def test_load_config_filters_legacy_state_names(tmp_path):
         "icons":    {"asking": "star.fill", "idle": "circle"},
         "priority": ["asking", "idle", "notify", "working"],
         "notifications": {"enabled_states": ["asking", "idle", "notify"]},
-        "events":   {"SessionStart": "idle",
-                     "Stop":         "waiting",
-                     "Notification": {"permission_prompt": "asking",
-                                      "auth_success":      "notify"}},
+        "claude_events": {"SessionStart": "idle",
+                          "Stop":         "waiting",
+                          "Notification": {"permission_prompt": "asking",
+                                           "auth_success":      "notify"}},
     }))
     cfg = claudebar.load_config(p)
     assert "idle" not in cfg["icons"]
     assert cfg["priority"] == ["asking", "working"]
     assert cfg["notifications"]["enabled_states"] == ["asking"]
     # SessionStart fell back to the default ("waiting") since the user named idle
-    assert cfg["events"]["SessionStart"] == "waiting"
+    assert cfg["claude_events"]["SessionStart"] == "waiting"
     # Notification kept the legitimate matcher, dropped the auth_success → notify
-    nroutes = cfg["events"]["Notification"]
+    nroutes = cfg["claude_events"]["Notification"]
     assert nroutes.get("permission_prompt") == "asking"
     assert "auth_success" not in nroutes
+
+
+def test_load_config_falls_back_to_legacy_events_key(tmp_path):
+    """Pre-rename configs used `events` as the Claude-events key. Treat
+    it as a legacy alias so old configs keep working without manual edits."""
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "events": {"SessionStart": "asking", "Stop": "waiting"},
+    }))
+    cfg = claudebar.load_config(p)
+    assert cfg["claude_events"]["SessionStart"] == "asking"
+    assert cfg["claude_events"]["Stop"] == "waiting"
 
 
 def test_header_icons_default_to_row_icons(tmp_path):
@@ -163,6 +175,32 @@ def test_header_icons_filtered_against_vocabulary(tmp_path):
     assert "notify" not in cfg["header_icons"]
     assert cfg["header_icons"]["asking"] == "exclamationmark.circle.fill"
     assert cfg["header_icons"]["working"] == "hourglass"
+
+
+def test_codex_events_default_when_missing(tmp_path):
+    cfg = claudebar.load_config(tmp_path / "missing.json")
+    assert cfg["codex_events"] == claudebar.DEFAULT_CODEX_EVENTS
+    # PermissionRequest is the Codex equivalent of Notification.permission_prompt
+    assert cfg["codex_events"]["PermissionRequest"] == "asking"
+
+
+def test_codex_events_user_override(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "codex_events": {
+            "PermissionRequest": "asking",
+            "PreToolUse":        "working",
+            "Stop":              "waiting",
+            # Bogus state name — should be filtered out by _filter_events,
+            # leaving the default in place.
+            "SessionStart":      "fictional_state",
+        }
+    }))
+    cfg = claudebar.load_config(p)
+    # Valid keys merged
+    assert cfg["codex_events"]["PermissionRequest"] == "asking"
+    # Invalid state for SessionStart drops back to default ("waiting")
+    assert cfg["codex_events"]["SessionStart"] == "waiting"
 
 
 def test_action_icons_default_when_missing(tmp_path):
@@ -239,10 +277,47 @@ def test_read_state_files_filters_stale(tmp_path, monkeypatch):
     now = int(time.time())
     fresh = {"state": "working", "session_id": "fresh", "since": now - 60}
     stale = {"state": "working", "session_id": "stale", "since": now - claudebar.STALE_AGE_S - 10}
-    (tmp_path / "fresh.json").write_text(json.dumps(fresh))
-    (tmp_path / "stale.json").write_text(json.dumps(stale))
+    fresh_path = tmp_path / "fresh.json"
+    stale_path = tmp_path / "stale.json"
+    fresh_path.write_text(json.dumps(fresh))
+    stale_path.write_text(json.dumps(stale))
     records = claudebar.read_state_files()
     assert [r["session_id"] for r in records] == ["fresh"]
+    # Stale file is opportunistically deleted on read.
+    assert not stale_path.exists()
+    assert fresh_path.exists()
+
+
+def test_read_state_files_drops_records_with_dead_pid(tmp_path, monkeypatch):
+    """A session whose agent process has exited shouldn't keep ghosting
+    in the menu (covers Codex hard-quit / no SessionEnd cases)."""
+    monkeypatch.setattr(claudebar, "STATE_DIR", tmp_path)
+    now = int(time.time())
+    # PID 1 (launchd) is always alive on macOS.
+    alive = {"state": "working", "session_id": "alive",
+             "since": now - 5, "agent_pid": 1}
+    # PID 0 / non-existent — we use a very high pid that almost certainly
+    # doesn't exist. (1 is launchd; 999999 is well past typical max_pid.)
+    dead = {"state": "working", "session_id": "dead",
+            "since": now - 5, "agent_pid": 999999}
+    (tmp_path / "alive.json").write_text(json.dumps(alive))
+    dead_path = tmp_path / "dead.json"
+    dead_path.write_text(json.dumps(dead))
+    records = claudebar.read_state_files()
+    assert [r["session_id"] for r in records] == ["alive"]
+    # Dead-pid record's file is also cleaned up.
+    assert not dead_path.exists()
+
+
+def test_read_state_files_keeps_records_without_agent_pid(tmp_path, monkeypatch):
+    """Records written by older hook versions (no `agent_pid`) must still
+    show up — falls back to the stale-age sweep alone."""
+    monkeypatch.setattr(claudebar, "STATE_DIR", tmp_path)
+    now = int(time.time())
+    legacy = {"state": "working", "session_id": "legacy", "since": now - 60}
+    (tmp_path / "legacy.json").write_text(json.dumps(legacy))
+    sids = [r["session_id"] for r in claudebar.read_state_files()]
+    assert sids == ["legacy"]
 
 
 def test_read_state_files_skips_corrupt(tmp_path, monkeypatch):

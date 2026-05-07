@@ -73,6 +73,14 @@ def main() -> int:
     if len(sys.argv) < 2:
         return 0
     state = sys.argv[1]
+    # Optional `--source=<claude|codex>` lets the same hook serve both
+    # agents (Claude Code wires it without the flag → defaults to claude;
+    # Codex CLI's hooks.json passes --source=codex). The source ends up
+    # in the state file so the plugin can label the row's origin later.
+    source = "claude"
+    for arg in sys.argv[2:]:
+        if arg.startswith("--source="):
+            source = arg.split("=", 1)[1] or "claude"
     payload = _read_payload()
 
     session_id = payload.get("session_id") or ""
@@ -99,6 +107,7 @@ def main() -> int:
 
     record = {
         "state":           state,
+        "source":          source,
         "session_id":      session_id,
         "cwd":             cwd,
         "transcript_path": transcript_path,
@@ -108,6 +117,11 @@ def main() -> int:
         "terminal_app":    prev_terminal or find_terminal_app(ppid),
         "tty":             prev_tty or get_tty_of(ppid),
         "notify_states":   prev_notify_states,  # None or list, persisted as-is
+        # The hook's PPID is the agent (claude/codex) process. Storing it
+        # lets the plugin prune sessions whose agent has since exited even
+        # without a SessionEnd hook (Codex CLI doesn't emit one; Claude
+        # may also miss it on a hard quit).
+        "agent_pid":       ppid,
         "since":           int(time.time()),
     }
     _atomic_write(target, record)

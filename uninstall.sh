@@ -11,8 +11,11 @@ if [ -z "$plugin_dir" ]; then
 fi
 plugin_dir="${plugin_dir:-$HOME/Documents/SwiftBar}"
 
-echo "==> Removing hooks from ~/.claude/settings.json"
+echo "==> Removing Claude hooks from ~/.claude/settings.json"
 /usr/bin/python3 "$REPO_DIR/scripts/uninstall_settings.py"
+
+echo "==> Removing Codex hooks from ~/.codex/hooks.json"
+/usr/bin/python3 "$REPO_DIR/scripts/uninstall_codex_hooks.py"
 
 echo "==> Removing plugin from $plugin_dir"
 rm -f "$plugin_dir"/claude-status.*.sh

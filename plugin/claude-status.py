@@ -14,7 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from claudebar import (  # noqa: E402
-    IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS, SUMMARY_MAX_LEN, TOGGLE_PATH,
+    APP_LOGOS, BRAND_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS,
+    SUMMARY_MAX_LEN, TOGGLE_PATH,
     aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
 
@@ -137,13 +138,21 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
 
     label = STATE_LABELS.get(state, state)
     age = humanage(now, r.get("since", 0))
-    line = f"{label}  {summary_text}  ({age} ago)"
+    state_icon = icons.get(state, "circle")
+    source = (r.get("source") or "claude").strip().lower()
+    brand_logo = BRAND_LOGOS.get(source) or BRAND_LOGOS["claude"]
 
     terminal_app = (r.get("terminal_app") or "").strip()
     tty = (r.get("tty") or "").strip()
     click = click_action(terminal_app, tty, cwd)
 
-    params = [f"sfimage={icons.get(state, 'circle')}"]
+    # Brand logo sits in the row's image slot; the state icon moves to
+    # the start of the label as an inline `:sf_symbol:` glyph. (The host
+    # app's icon lives on the "Return to Tab" submenu row instead, so we
+    # don't pile it onto the main label as well.)
+    line = f":{state_icon}: {label}  {summary_text}  ({age} ago)"
+
+    params = [f"templateImage={brand_logo} width=14 height=14"]
     if click:
         params.append(click)
     elif cwd:
@@ -159,7 +168,24 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
             f"bash='/usr/bin/open' param1='{cwd}' terminal=false"
         )
     if click:
-        print(f"-- Return to Tab | sfimage={action_icons['return_to_tab']} {click}")
+        # Prefer the actual host app's icon (full-color PNG bundled in
+        # APP_LOGOS) so the row visually identifies the destination.
+        # Lookup is case-insensitive as a safety net for legacy state
+        # files written before name-canonicalisation. Fall back to the
+        # configurable SF Symbol when no bundled logo matches.
+        app_logo = APP_LOGOS.get(terminal_app)
+        if not app_logo and terminal_app:
+            ci_match = next(
+                (v for k, v in APP_LOGOS.items() if k.lower() == terminal_app.lower()),
+                None,
+            )
+            app_logo = ci_match
+        icon_attr = (
+            f"image={app_logo} width=16 height=16"
+            if app_logo
+            else f"sfimage={action_icons['return_to_tab']}"
+        )
+        print(f"-- Return to Tab | {icon_attr} {click}")
     print("-----")
     render_notify_toggles(r, priority, notifications, notify_icons)
 

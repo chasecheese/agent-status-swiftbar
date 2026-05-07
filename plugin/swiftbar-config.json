@@ -27,7 +27,7 @@
     "working",
     "waiting"
   ],
-  "events": {
+  "claude_events": {
     "SessionStart":     "waiting",
     "UserPromptSubmit": "working",
     "PreToolUse":       "working",
@@ -42,6 +42,14 @@
     "SubagentStop":     null,
     "PreCompact":       null,
     "SessionEnd":       "end"
+  },
+  "codex_events": {
+    "SessionStart":      "waiting",
+    "UserPromptSubmit":  "working",
+    "PreToolUse":        "working",
+    "PostToolUse":       "working",
+    "PermissionRequest": "asking",
+    "Stop":              "waiting"
   },
   "notifications": {
     "enabled_states":  [],

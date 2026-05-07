@@ -3,19 +3,65 @@
 #
 # Deploys (in order):
 #   ~/.claude/scripts/claudebar.py                  shared lib
-#   ~/.claude/scripts/claude-swiftbar-hook.py       hook entry
+#   ~/.claude/scripts/claude-swiftbar-hook.py       hook entry (Claude + Codex)
 #   ~/.claude/scripts/claude-swiftbar-plugin.py     plugin entry
+#   ~/.claude/scripts/claude-swiftbar-toggle.py     dropdown click callback
 #   ~/.claude/swiftbar-config.json                  user config (preserves edits via .bak)
 #   <SwiftBar plugin dir>/claude-status.<interval>.sh   bash wrapper SwiftBar runs
-#   ~/.claude/settings.json                         (patched: our hook routes wired in)
+#   ~/.claude/settings.json                         (patched: Claude hook routes)  [Claude]
+#   ~/.codex/hooks.json                             (patched: Codex hook routes)   [Codex]
 #
-# Idempotent. Override the SwiftBar plugin folder with SWIFTBAR_PLUGIN_DIR.
+# Flags (defaults: auto-detect each):
+#   --claude / --no-claude    force install / skip Claude integration
+#   --codex  / --no-codex     force install / skip Codex  integration
+#
+# Idempotent. Override SwiftBar plugin folder with SWIFTBAR_PLUGIN_DIR.
 
 set -euo pipefail
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PY=/usr/bin/python3
 LIB="$REPO_DIR/lib"
+
+INSTALL_CLAUDE=auto
+INSTALL_CODEX=auto
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --claude)    INSTALL_CLAUDE=yes ;;
+    --no-claude) INSTALL_CLAUDE=no  ;;
+    --codex)     INSTALL_CODEX=yes  ;;
+    --no-codex)  INSTALL_CODEX=no   ;;
+    -h|--help)
+      sed -n '/^# /,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
+      exit 0
+      ;;
+    *)
+      echo "unknown flag: $1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+resolve_auto() {
+  # $1 = current value, $2 = home dir to look for, $3 = CLI binary name
+  if [ "$1" != auto ]; then echo "$1"; return; fi
+  if [ -d "$HOME/$2" ] || command -v "$3" >/dev/null 2>&1; then
+    echo yes
+  else
+    echo no
+  fi
+}
+INSTALL_CLAUDE=$(resolve_auto "$INSTALL_CLAUDE" .claude claude)
+INSTALL_CODEX=$(resolve_auto "$INSTALL_CODEX" .codex codex)
+
+if [ "$INSTALL_CLAUDE" = no ] && [ "$INSTALL_CODEX" = no ]; then
+  echo "Neither Claude Code nor Codex CLI was detected; pass --claude or --codex to force." >&2
+  exit 2
+fi
+
+echo "==> Targets: claude=$INSTALL_CLAUDE  codex=$INSTALL_CODEX"
 
 echo "==> Checking SwiftBar"
 if [ ! -d "/Applications/SwiftBar.app" ]; then
@@ -78,17 +124,24 @@ find "$plugin_dir" -maxdepth 1 -name 'claude-status.*.sh' ! -name "$plugin_name"
 echo "==> Installing plugin wrapper -> $plugin_dst"
 install -m 0755 "$REPO_DIR/plugin/claude-status.sh" "$plugin_dst"
 
-echo "==> Wiring hooks into ~/.claude/settings.json"
-"$PY" "$REPO_DIR/scripts/install_settings.py"
+if [ "$INSTALL_CLAUDE" = yes ]; then
+  echo "==> Wiring Claude hooks into ~/.claude/settings.json"
+  "$PY" "$REPO_DIR/scripts/install_settings.py"
+fi
+
+if [ "$INSTALL_CODEX" = yes ]; then
+  echo "==> Wiring Codex hooks into ~/.codex/hooks.json"
+  "$PY" "$REPO_DIR/scripts/install_codex_hooks.py"
+fi
 
 echo "==> Refreshing SwiftBar"
 open -g "swiftbar://refreshallplugins" >/dev/null 2>&1 || true
 
 cat <<EOF
 
-Done. Open a Claude Code session — the menu bar SF Symbol changes as
-Claude starts, works, finishes, or waits on you. Click the icon for
-per-session details. Customize symbols, priority, hook routing, and
-refresh interval in:
+Done. Open a Claude Code or Codex session — the menu bar SF Symbol
+changes as the agent starts, works, finishes, or waits on you. Click
+the icon for per-session details. Customize symbols, priority, hook
+routing, and refresh interval in:
   ~/.claude/swiftbar-config.json
 EOF
