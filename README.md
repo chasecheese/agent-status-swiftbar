@@ -185,6 +185,8 @@ brew install terminal-notifier
 
 Without `terminal-notifier`, the plugin falls back to `osascript`.
 
+![Notification example](assets/notification.png)
+
 ## Uninstall
 
 ```sh
