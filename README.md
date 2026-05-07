@@ -9,6 +9,8 @@ symbol. Open the dropdown to see each session, its current state, age, working
 directory, latest prompt/summary, and shortcuts back to the originating tab or
 folder.
 
+![agent-status-swiftbar in the menu bar](assets/screenshot.png)
+
 ## What It Shows
 
 `agent-status-swiftbar` tracks three live states:
