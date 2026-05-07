@@ -41,40 +41,22 @@ OSASCRIPT = "/usr/bin/osascript"
 DEFAULT_REFRESH_INTERVAL_MS = 1000
 MIN_REFRESH_INTERVAL_MS = 100
 
-# ── Mode presets ─────────────────────────────────────────────────────────────
-# `mode` in swiftbar-config.json picks which preset is the base for icons /
-# priority / events; user-supplied keys then merge on top.
-#
-# "full"   — every state distinguished (default; backward-compatible)
-# "simple" — three live states only (asking / working / waiting); a fresh
-#            session starts as waiting. SessionStart, idle_prompt, and
-#            auth_success collapse into nearby states or get silenced.
-DEFAULT_ICONS_FULL = {
-    "asking":  "exclamationmark.bubble.circle.fill",
-    "notify":  "bell.circle.fill",
-    "working": "hourglass.circle.fill",
-    "waiting": "circle.badge.checkmark",
-    "idle":    "circle",
-    "none":    "circle.dotted",
+# ── State taxonomy ───────────────────────────────────────────────────────────
+# Three live states, plus `none` for the empty-aggregate menu-bar header.
+# A fresh session opens as `waiting` (no separate `idle`).
+STATE_LABELS = {
+    "asking":  "ASKING",
+    "working": "WORKING",
+    "waiting": "WAITING",
 }
-DEFAULT_PRIORITY_FULL = ["asking", "notify", "working", "waiting", "idle"]
-
-DEFAULT_ICONS_SIMPLE = {
+DEFAULT_ICONS = {
     "asking":  "exclamationmark.bubble.circle.fill",
     "working": "hourglass.circle.fill",
     "waiting": "circle.badge.checkmark",
     "none":    "circle.dotted",
 }
-DEFAULT_PRIORITY_SIMPLE = ["asking", "working", "waiting"]
-
-# Backward-compat aliases (callers that imported these still work).
-DEFAULT_ICONS = DEFAULT_ICONS_FULL
-DEFAULT_PRIORITY = DEFAULT_PRIORITY_FULL
-
-# Per-mode desktop-notification defaults. The non-state fields (sound /
-# include_summary) are the same; only enabled_states differs because each
-# mode has a different state vocabulary.
-DEFAULT_NOTIFICATIONS_FULL = {
+DEFAULT_PRIORITY = ["asking", "working", "waiting"]
+DEFAULT_NOTIFICATIONS = {
     # No notifications enabled out of the box — opt in via the dropdown's
     # per-session toggles (writes notify_states into that session's state).
     "enabled_states":   [],
@@ -82,15 +64,6 @@ DEFAULT_NOTIFICATIONS_FULL = {
     "sound_name":       "Glass",
     "include_summary":  True,
 }
-DEFAULT_NOTIFICATIONS_SIMPLE = {
-    "enabled_states":   [],
-    "sound":            False,
-    "sound_name":       "Glass",
-    "include_summary":  True,
-}
-
-# Backward-compat alias.
-DEFAULT_NOTIFICATIONS = DEFAULT_NOTIFICATIONS_FULL
 
 # Full official Claude Code hook surface. install_settings.py iterates this so
 # disabling an event in the user config (set null) actually removes our prior
@@ -106,8 +79,8 @@ ALL_EVENTS = (
     "PreCompact",
     "SessionEnd",
 )
-DEFAULT_EVENTS_FULL = {
-    "SessionStart":     "idle",
+DEFAULT_EVENTS = {
+    "SessionStart":     "waiting",     # fresh session → waiting
     "UserPromptSubmit": "working",
     "PreToolUse":       "working",
     "PostToolUse":      "working",
@@ -115,46 +88,12 @@ DEFAULT_EVENTS_FULL = {
         "permission_prompt":  "asking",
         "elicitation_dialog": "asking",
         "idle_prompt":        None,
-        "auth_success":       "notify",
+        "auth_success":       None,
     },
     "Stop":             "waiting",
     "SubagentStop":     None,
     "PreCompact":       None,
     "SessionEnd":       "end",
-}
-DEFAULT_EVENTS_SIMPLE = {
-    "SessionStart":     "waiting",     # fresh session → waiting (not idle)
-    "UserPromptSubmit": "working",
-    "PreToolUse":       "working",
-    "PostToolUse":      "working",
-    "Notification": {
-        "permission_prompt":  "asking",
-        "elicitation_dialog": "asking",
-        "idle_prompt":        None,
-        "auth_success":       None,    # no notify state in simple mode
-    },
-    "Stop":             "waiting",
-    "SubagentStop":     None,
-    "PreCompact":       None,
-    "SessionEnd":       "end",
-}
-
-DEFAULT_MODE = "full"
-MODES = {
-    "full":   (DEFAULT_ICONS_FULL,   DEFAULT_PRIORITY_FULL,
-               DEFAULT_EVENTS_FULL,  DEFAULT_NOTIFICATIONS_FULL),
-    "simple": (DEFAULT_ICONS_SIMPLE, DEFAULT_PRIORITY_SIMPLE,
-               DEFAULT_EVENTS_SIMPLE, DEFAULT_NOTIFICATIONS_SIMPLE),
-}
-
-# Backward-compat alias.
-DEFAULT_EVENTS = DEFAULT_EVENTS_FULL
-STATE_LABELS = {
-    "asking":  "ASKING",
-    "notify":  "NOTIFY",
-    "working": "WORKING",
-    "waiting": "WAITING",
-    "idle":    "IDLE",
 }
 
 # Sessions older than this are treated as dead (Claude Code may have crashed
@@ -276,10 +215,10 @@ def latest_ai_title(transcript_path: str) -> str:
 
 # ── Config ───────────────────────────────────────────────────────────────────
 def _filter_events(user_events: dict, allowed_states: set) -> dict:
-    """Strip user event entries that route to states outside this mode.
+    """Strip user event entries that route to unknown states.
 
-    Strings: dropped if the named state isn't in this mode's vocabulary
-    (the special sentinels ``end`` and ``""``/``None`` are always kept).
+    Strings: dropped unless the named state is in the vocabulary
+    (sentinels ``end`` / ``""`` / ``None`` are always kept).
     Dicts (per-matcher routes): each matcher entry is kept iff its target
     state is allowed. The whole event entry is preserved so legitimate
     matchers can still take effect even when one is dropped.
@@ -316,9 +255,9 @@ def _coerce_interval(value) -> int:
 def load_config(path: Path | None = None) -> dict:
     """Read swiftbar-config.json and return a fully-populated config dict.
 
-    Always returns a dict with the four top-level keys
-    (``refresh_interval_ms``, ``icons``, ``priority``, ``events``);
-    missing or malformed sections fall back to defaults.
+    Always returns the same shape regardless of what's on disk; missing or
+    malformed sections fall back to defaults. User-supplied entries that
+    name states outside the known vocabulary are silently dropped.
 
     Pass ``path`` to read from a non-default location (``install.sh`` uses
     this to read the repo's seed config before deployment).
@@ -332,33 +271,43 @@ def load_config(path: Path | None = None) -> dict:
     except Exception:
         cfg = {}
 
-    mode = cfg.get("mode") if isinstance(cfg.get("mode"), str) else DEFAULT_MODE
-    if mode not in MODES:
-        mode = DEFAULT_MODE
-    base_icons, base_priority, base_events, base_notifications = MODES[mode]
-    allowed_states = set(base_icons)  # vocabulary for this mode
+    allowed_states = set(DEFAULT_ICONS)
 
-    # User-supplied icon overrides only take effect for states this mode
-    # actually surfaces — keeps `mode: "simple"` strict even when the rest
-    # of the config still names full-mode states.
-    icons = dict(base_icons)
+    icons = dict(DEFAULT_ICONS)
     if isinstance(cfg.get("icons"), dict):
         for k, v in cfg["icons"].items():
             if isinstance(v, str) and v and k in allowed_states:
                 icons[k] = v
 
-    priority = list(base_priority)
+    # Menu-bar header icons: optional separate map. Falls back to the
+    # row-icons set per state if `header_icons` is missing or doesn't
+    # specify a particular state.
+    header_icons = dict(icons)
+    if isinstance(cfg.get("header_icons"), dict):
+        for k, v in cfg["header_icons"].items():
+            if isinstance(v, str) and v and k in allowed_states:
+                header_icons[k] = v
+
+    # Per-state icons used by the dropdown's "Notify on: …" toggles.
+    # Falls back to the row icons same way header_icons does.
+    notify_icons = dict(icons)
+    if isinstance(cfg.get("notify_icons"), dict):
+        for k, v in cfg["notify_icons"].items():
+            if isinstance(v, str) and v and k in allowed_states:
+                notify_icons[k] = v
+
+    priority = list(DEFAULT_PRIORITY)
     pr = cfg.get("priority")
     if isinstance(pr, list):
         valid = [s for s in pr if isinstance(s, str) and s in allowed_states and s != "none"]
         if valid:
             priority = valid
 
-    events = dict(base_events)
+    events = dict(DEFAULT_EVENTS)
     if isinstance(cfg.get("events"), dict):
         events.update(_filter_events(cfg["events"], allowed_states))
 
-    notifications = dict(base_notifications)
+    notifications = dict(DEFAULT_NOTIFICATIONS)
     if isinstance(cfg.get("notifications"), dict):
         user_notif = cfg["notifications"]
         states = user_notif.get("enabled_states")
@@ -374,10 +323,11 @@ def load_config(path: Path | None = None) -> dict:
             notifications["sound_name"] = sound_name
 
     return {
-        "mode": mode,
         "refresh_interval_ms": _coerce_interval(cfg.get("refresh_interval_ms",
                                                          DEFAULT_REFRESH_INTERVAL_MS)),
         "icons": icons,
+        "header_icons": header_icons,
+        "notify_icons": notify_icons,
         "priority": priority,
         "events": events,
         "notifications": notifications,

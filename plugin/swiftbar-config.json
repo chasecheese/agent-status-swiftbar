@@ -1,6 +1,43 @@
 {
-  "mode": "simple",
   "refresh_interval_ms": 500,
+  "icons": {
+    "asking":  "exclamationmark.bubble.circle.fill",
+    "working": "hourglass.circle.fill",
+    "waiting": "circle.badge.checkmark",
+    "none":    "circle.dotted"
+  },
+  "header_icons": {
+    "asking":  "exclamationmark.circle.fill",
+    "working": "hourglass",
+    "waiting": "checkmark.circle",
+    "none":    "circle.dotted"
+  },
+  "notify_icons": {
+    "asking":  "exclamationmark.bubble.circle.fill",
+    "working": "hourglass.circle.fill",
+    "waiting": "circle.badge.checkmark"
+  },
+  "priority": [
+    "asking",
+    "working",
+    "waiting"
+  ],
+  "events": {
+    "SessionStart":     "waiting",
+    "UserPromptSubmit": "working",
+    "PreToolUse":       "working",
+    "PostToolUse":      "working",
+    "Notification": {
+      "permission_prompt":  "asking",
+      "elicitation_dialog": "asking",
+      "idle_prompt":        null,
+      "auth_success":       null
+    },
+    "Stop":             "waiting",
+    "SubagentStop":     null,
+    "PreCompact":       null,
+    "SessionEnd":       "end"
+  },
   "notifications": {
     "enabled_states":  [],
     "sound":           false,

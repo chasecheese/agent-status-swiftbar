@@ -102,6 +102,7 @@ def test_maybe_notify_skips_when_state_not_in_effective(monkeypatch):
 
 def test_maybe_notify_fires_on_enabled_transition(monkeypatch):
     calls = []
+    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
     monkeypatch.setattr(claudebar.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
     claudebar.maybe_notify(
@@ -130,6 +131,7 @@ def test_maybe_notify_session_override_takes_precedence(monkeypatch):
 
 def test_maybe_notify_includes_sound_when_requested(monkeypatch):
     calls = []
+    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
     monkeypatch.setattr(claudebar.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
     claudebar.maybe_notify(
@@ -205,6 +207,7 @@ def test_maybe_notify_skips_execute_when_no_terminal_app(monkeypatch):
 
 def test_maybe_notify_escapes_quotes_in_summary(monkeypatch):
     calls = []
+    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
     monkeypatch.setattr(claudebar.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
     claudebar.maybe_notify(

@@ -94,13 +94,13 @@ def click_action(terminal_app: str, tty: str, cwd: str) -> str:
 
 
 # ── Rendering ────────────────────────────────────────────────────────────────
-def render_header(records: list[dict], icons: dict, priority: list[str]) -> None:
+def render_header(records: list[dict], header_icons: dict, priority: list[str]) -> None:
     agg = aggregate_state(records, priority)
-    print(f"| sfimage={icons.get(agg, 'circle')}")
+    print(f"| sfimage={header_icons.get(agg, 'circle')}")
 
 
 def render_notify_toggles(record: dict, priority: list[str],
-                          notifications: dict) -> None:
+                          notifications: dict, notify_icons: dict) -> None:
     """Per-session notification toggles. Writes to the session's state file."""
     session_id = (record.get("session_id") or "").strip()
     if not session_id:
@@ -111,8 +111,10 @@ def render_notify_toggles(record: dict, priority: list[str],
         on = state in enabled
         mark = "✓" if on else "  "
         label = STATE_LABELS.get(state, state)
+        icon = notify_icons.get(state, "circle")
         print(
             f"-- {mark} {label} | "
+            f"sfimage={icon} "
             f"bash='{TOGGLE_PATH}' param1='--session' param2='{session_id}' "
             f"param3='--state' param4='{state}' "
             f"refresh=true terminal=false"
@@ -120,7 +122,7 @@ def render_notify_toggles(record: dict, priority: list[str],
 
 
 def render_row(r: dict, now: int, icons: dict, priority: list[str],
-               notifications: dict) -> None:
+               notifications: dict, notify_icons: dict) -> None:
     state = r.get("state", "?")
     cwd = r.get("cwd", "") or ""
     short_cwd = Path(cwd).name if cwd else ""
@@ -153,14 +155,14 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     if cwd:
         print(f"-- Open folder | bash='/usr/bin/open' param1='{cwd}' terminal=false")
     print("-- ---")
-    render_notify_toggles(r, priority, notifications)
+    render_notify_toggles(r, priority, notifications, notify_icons)
 
 
 def main() -> None:
     cfg = load_config()
     records = read_state_files()
 
-    render_header(records, cfg["icons"], cfg["priority"])
+    render_header(records, cfg["header_icons"], cfg["priority"])
     print("---")
 
     if not records:
@@ -168,7 +170,8 @@ def main() -> None:
     else:
         now = int(time.time())
         for r in records:
-            render_row(r, now, cfg["icons"], cfg["priority"], cfg["notifications"])
+            render_row(r, now, cfg["icons"], cfg["priority"],
+                       cfg["notifications"], cfg["notify_icons"])
 
     print("---")
     print("Refresh | refresh=true")
