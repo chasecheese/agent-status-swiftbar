@@ -8,7 +8,7 @@
   },
   "header_icons": {
     "asking":  "circle.badge.exclamationmark",
-    "working": "hourglass.circle",
+    "working": "infinity.circle",
     "waiting": "circle.badge.checkmark",
     "none":    "circle.dotted"
   },

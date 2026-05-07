@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from claudebar import (  # noqa: E402
-    APP_LOGOS, BRAND_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS,
+    APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_BRAND_LOGOS, STATE_LABELS,
     SUMMARY_MAX_LEN, TOGGLE_PATH,
     aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
@@ -140,19 +140,21 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     age = humanage(now, r.get("since", 0))
     state_icon = icons.get(state, "circle")
     source = (r.get("source") or "claude").strip().lower()
-    brand_logo = BRAND_LOGOS.get(source) or BRAND_LOGOS["claude"]
 
     terminal_app = (r.get("terminal_app") or "").strip()
     tty = (r.get("tty") or "").strip()
     click = click_action(terminal_app, tty, cwd)
 
-    # Brand logo sits in the row's image slot; the state icon moves to
-    # the start of the label as an inline `:sf_symbol:` glyph. (The host
-    # app's icon lives on the "Return to Tab" submenu row instead, so we
-    # don't pile it onto the main label as well.)
-    line = f":{state_icon}: {label}  {summary_text}  ({age} ago)"
-
-    params = [f"templateImage={brand_logo} width=14 height=14"]
+    # 2-icon brand+state pill (template PNG, NSMenu auto-tints with the
+    # menu bar). Source is 96×48 (3×) so it stays sharp on Retina @2x and
+    # @3x. Display as 32×16 logical. Falls back to the plain state SF
+    # Symbol if the source isn't claude/codex.
+    pill = STATE_BRAND_LOGOS.get(source, {}).get(state)
+    line = f"{label}  {summary_text}  ({age} ago)"
+    if pill:
+        params = [f"templateImage={pill} width=32 height=16"]
+    else:
+        params = [f"sfimage={state_icon}"]
     if click:
         params.append(click)
     elif cwd:
