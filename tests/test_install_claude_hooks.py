@@ -1,4 +1,4 @@
-"""Unit tests for scripts/install_settings.py.
+"""Unit tests for scripts/install_claude_hooks.py.
 
 Exercises the settings.json patcher's normalize/upsert primitives so we
 catch regressions in the (most subtle, most error-prone) part of the
@@ -12,7 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import install_settings as ins  # noqa: E402
+import install_claude_hooks as ins  # noqa: E402
 
 
 def test_normalize_routes_string_becomes_default_matcher():

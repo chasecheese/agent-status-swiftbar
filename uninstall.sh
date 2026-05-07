@@ -12,19 +12,19 @@ fi
 plugin_dir="${plugin_dir:-$HOME/Documents/SwiftBar}"
 
 echo "==> Removing Claude hooks from ~/.claude/settings.json"
-/usr/bin/python3 "$REPO_DIR/scripts/uninstall_settings.py"
+/usr/bin/python3 "$REPO_DIR/scripts/uninstall_claude_hooks.py"
 
 echo "==> Removing Codex hooks from ~/.codex/hooks.json"
 /usr/bin/python3 "$REPO_DIR/scripts/uninstall_codex_hooks.py"
 
 echo "==> Removing plugin from $plugin_dir"
-rm -f "$plugin_dir"/claude-status.*.sh
+rm -f "$plugin_dir"/agent-status.*.sh
 
 echo "==> Removing scripts under ~/.claude/scripts"
-rm -f "$HOME/.claude/scripts/claude-swiftbar-hook.py"
-rm -f "$HOME/.claude/scripts/claude-swiftbar-plugin.py"
-rm -f "$HOME/.claude/scripts/claude-swiftbar-toggle.py"
-rm -f "$HOME/.claude/scripts/claudebar.py"
+rm -f "$HOME/.claude/scripts/agent-status-hook.py"
+rm -f "$HOME/.claude/scripts/agent-status-plugin.py"
+rm -f "$HOME/.claude/scripts/agent-status-toggle.py"
+rm -f "$HOME/.claude/scripts/agentstatus.py"
 
 echo "==> Refreshing SwiftBar"
 open -g "swiftbar://refreshallplugins" >/dev/null 2>&1 || true

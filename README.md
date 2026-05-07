@@ -82,13 +82,13 @@ SWIFTBAR_PLUGIN_DIR="$HOME/Library/Application Support/SwiftBar/Plugins" ./insta
 The installer writes these files:
 
 ```text
-~/.claude/scripts/claudebar.py
-~/.claude/scripts/claude-swiftbar-hook.py
-~/.claude/scripts/claude-swiftbar-plugin.py
-~/.claude/scripts/claude-swiftbar-toggle.py
+~/.claude/scripts/agentstatus.py
+~/.claude/scripts/agent-status-hook.py
+~/.claude/scripts/agent-status-plugin.py
+~/.claude/scripts/agent-status-toggle.py
 ~/.claude/swiftbar-config.json
 ~/.claude/state/swiftbar/
-<SwiftBar plugin dir>/claude-status.<interval>.sh
+<SwiftBar plugin dir>/agent-status.<interval>.sh
 ```
 
 It also patches hook configuration:
@@ -160,7 +160,7 @@ After changing hook routing in the installed config, regenerate the matching
 hook file:
 
 ```sh
-/usr/bin/python3 scripts/install_settings.py
+/usr/bin/python3 scripts/install_claude_hooks.py
 /usr/bin/python3 scripts/install_codex_hooks.py
 ```
 
@@ -216,11 +216,11 @@ uv run pytest
 Useful paths:
 
 ```text
-lib/claudebar.py                  shared logic
-hook/claude-swiftbar-hook.py      hook entry point
-plugin/claude-status.py           SwiftBar renderer
+lib/agentstatus.py                  shared logic
+hook/agent-status-hook.py      hook entry point
+plugin/agent-status.py           SwiftBar renderer
 plugin/toggle.py                  notification toggle helper
-scripts/install_settings.py       Claude hook patcher
+scripts/install_claude_hooks.py       Claude hook patcher
 scripts/install_codex_hooks.py    Codex hook patcher
 ```
 

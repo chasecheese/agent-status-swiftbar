@@ -2,12 +2,12 @@
 # Install agent-status-swiftbar.
 #
 # Deploys (in order):
-#   ~/.claude/scripts/claudebar.py                  shared lib
-#   ~/.claude/scripts/claude-swiftbar-hook.py       hook entry (Claude + Codex)
-#   ~/.claude/scripts/claude-swiftbar-plugin.py     plugin entry
-#   ~/.claude/scripts/claude-swiftbar-toggle.py     dropdown click callback
+#   ~/.claude/scripts/agentstatus.py                  shared lib
+#   ~/.claude/scripts/agent-status-hook.py       hook entry (Claude + Codex)
+#   ~/.claude/scripts/agent-status-plugin.py     plugin entry
+#   ~/.claude/scripts/agent-status-toggle.py     dropdown click callback
 #   ~/.claude/swiftbar-config.json                  user config (preserves edits via .bak)
-#   <SwiftBar plugin dir>/claude-status.<interval>.sh   bash wrapper SwiftBar runs
+#   <SwiftBar plugin dir>/agent-status.<interval>.sh   bash wrapper SwiftBar runs
 #   ~/.claude/settings.json                         (patched: Claude hook routes)  [Claude]
 #   ~/.codex/hooks.json                             (patched: Codex hook routes)   [Codex]
 #
@@ -88,17 +88,17 @@ fi
 claude_scripts="$HOME/.claude/scripts"
 mkdir -p "$plugin_dir" "$claude_scripts" "$HOME/.claude/state/swiftbar"
 
-echo "==> Installing shared lib -> $claude_scripts/claudebar.py"
-install -m 0644 "$LIB/claudebar.py" "$claude_scripts/claudebar.py"
+echo "==> Installing shared lib -> $claude_scripts/agentstatus.py"
+install -m 0644 "$LIB/agentstatus.py" "$claude_scripts/agentstatus.py"
 
-echo "==> Installing hook -> $claude_scripts/claude-swiftbar-hook.py"
-install -m 0755 "$REPO_DIR/hook/claude-swiftbar-hook.py" "$claude_scripts/claude-swiftbar-hook.py"
+echo "==> Installing hook -> $claude_scripts/agent-status-hook.py"
+install -m 0755 "$REPO_DIR/hook/agent-status-hook.py" "$claude_scripts/agent-status-hook.py"
 
-echo "==> Installing plugin entry -> $claude_scripts/claude-swiftbar-plugin.py"
-install -m 0755 "$REPO_DIR/plugin/claude-status.py" "$claude_scripts/claude-swiftbar-plugin.py"
+echo "==> Installing plugin entry -> $claude_scripts/agent-status-plugin.py"
+install -m 0755 "$REPO_DIR/plugin/agent-status.py" "$claude_scripts/agent-status-plugin.py"
 
-echo "==> Installing toggle helper -> $claude_scripts/claude-swiftbar-toggle.py"
-install -m 0755 "$REPO_DIR/plugin/toggle.py" "$claude_scripts/claude-swiftbar-toggle.py"
+echo "==> Installing toggle helper -> $claude_scripts/agent-status-toggle.py"
+install -m 0755 "$REPO_DIR/plugin/toggle.py" "$claude_scripts/agent-status-toggle.py"
 
 config_src="$REPO_DIR/plugin/swiftbar-config.json"
 config_dst="$HOME/.claude/swiftbar-config.json"
@@ -113,20 +113,20 @@ install -m 0644 "$config_src" "$config_dst"
 # Plugin filename encodes refresh interval — SwiftBar parses it from the name.
 plugin_name=$("$PY" -c "
 import sys; sys.path.insert(0, '$LIB')
-from claudebar import load_config, plugin_filename_for
+from agentstatus import load_config, plugin_filename_for
 print(plugin_filename_for(load_config()['refresh_interval_ms']))
 ")
 plugin_dst="$plugin_dir/$plugin_name"
 
 # Strip any prior install (refresh interval may have changed → different filename).
-find "$plugin_dir" -maxdepth 1 -name 'claude-status.*.sh' ! -name "$plugin_name" -delete 2>/dev/null || true
+find "$plugin_dir" -maxdepth 1 -name 'agent-status.*.sh' ! -name "$plugin_name" -delete 2>/dev/null || true
 
 echo "==> Installing plugin wrapper -> $plugin_dst"
-install -m 0755 "$REPO_DIR/plugin/claude-status.sh" "$plugin_dst"
+install -m 0755 "$REPO_DIR/plugin/agent-status.sh" "$plugin_dst"
 
 if [ "$INSTALL_CLAUDE" = yes ]; then
   echo "==> Wiring Claude hooks into ~/.claude/settings.json"
-  "$PY" "$REPO_DIR/scripts/install_settings.py"
+  "$PY" "$REPO_DIR/scripts/install_claude_hooks.py"
 fi
 
 if [ "$INSTALL_CODEX" = yes ]; then

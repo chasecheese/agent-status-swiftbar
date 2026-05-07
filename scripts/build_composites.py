@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the dropdown's per-session pill composites.
 
-Produces two tables in ``lib/claudebar.py``:
+Produces two tables in ``lib/agentstatus.py``:
 
 - ``STATE_BRAND_LOGOS`` — 2-icon ``(brand, state)`` template pill (alpha
   + black). NSMenu auto-tints with the menu bar. Used as a fallback when
@@ -19,7 +19,7 @@ Produces two tables in ``lib/claudebar.py``:
 Run when:
 - the brand assets, state list, or pill geometry/palette changes
 - ``plugin/swiftbar-config.json``'s ``icons`` section changes
-- a new entry is added to ``APP_LOGOS`` in ``lib/claudebar.py``
+- a new entry is added to ``APP_LOGOS`` in ``lib/agentstatus.py``
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets"
-LIB_PATH = REPO_ROOT / "lib" / "claudebar.py"
+LIB_PATH = REPO_ROOT / "lib" / "agentstatus.py"
 SEED_CONFIG = REPO_ROOT / "plugin" / "swiftbar-config.json"
 
 SOURCES = ("claude", "codex")
@@ -255,12 +255,12 @@ def _replace_block(src_text: str, name: str, block: str) -> str:
         flags=re.DOTALL,
     )
     if n != 1:
-        raise SystemExit(f"ERROR: {name} block not found in claudebar.py")
+        raise SystemExit(f"ERROR: {name} block not found in agentstatus.py")
     return new
 
 
 def _import_app_logos() -> dict[str, Image.Image]:
-    spec = importlib.util.spec_from_file_location("claudebar", LIB_PATH)
+    spec = importlib.util.spec_from_file_location("agentstatus", LIB_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     out = {}
@@ -288,7 +288,7 @@ def main() -> int:
     print(f"  2-icon: {len(SOURCES) * len(STATES)} composites "
           f"avg {sum(len(table2[s][st]) for s in SOURCES for st in STATES) // (len(SOURCES) * len(STATES))}b base64")
 
-    # 3-icon pill — needs APP_LOGOS already in claudebar.py.
+    # 3-icon pill — needs APP_LOGOS already in agentstatus.py.
     app_icons = _import_app_logos()
     hosts = sorted(app_icons.keys())
     brand_alpha_p3 = {

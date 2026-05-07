@@ -4,9 +4,9 @@ Single source of truth for filesystem paths, default state taxonomy,
 process-tree introspection, transcript parsing, and config loading.
 
 Imported by:
-- hook/claude-swiftbar-hook.py     (writes per-session state files)
-- plugin/claude-status.py          (renders SwiftBar dropdown)
-- scripts/install_settings.py      (patches ~/.claude/settings.json)
+- hook/agent-status-hook.py     (writes per-session state files)
+- plugin/agent-status.py          (renders SwiftBar dropdown)
+- scripts/install_claude_hooks.py      (patches ~/.claude/settings.json)
 
 Designed to fail soft: every helper that touches the filesystem catches
 its own exceptions and returns an empty/default value rather than raising.
@@ -30,9 +30,9 @@ STATE_DIR = CLAUDE_DIR / "state" / "swiftbar"
 CONFIG_PATH = CLAUDE_DIR / "swiftbar-config.json"
 SETTINGS_PATH = CLAUDE_DIR / "settings.json"
 SCRIPTS_DIR = CLAUDE_DIR / "scripts"
-HOOK_PATH = SCRIPTS_DIR / "claude-swiftbar-hook.py"
-PLUGIN_PY_PATH = SCRIPTS_DIR / "claude-swiftbar-plugin.py"
-TOGGLE_PATH = SCRIPTS_DIR / "claude-swiftbar-toggle.py"
+HOOK_PATH = SCRIPTS_DIR / "agent-status-hook.py"
+PLUGIN_PY_PATH = SCRIPTS_DIR / "agent-status-plugin.py"
+TOGGLE_PATH = SCRIPTS_DIR / "agent-status-toggle.py"
 
 # Codex CLI lives next to Claude under the user home; its hooks file is the
 # Codex-side equivalent of ~/.claude/settings.json (just hooks-only).
@@ -61,6 +61,61 @@ DEFAULT_ICONS = {
     "none":    "circle.dotted",
 }
 DEFAULT_PRIORITY = ["asking", "working", "waiting"]
+
+# 16×16 fully-transparent PNG. Used as an icon-column placeholder on
+# continuation rows of the per-session id footer so the wrapped text
+# aligns under the id (not under the brand logo).
+TRANSPARENT_ICON_16 = (
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAEklEQVR42mNgGAWjYBSMAggAAAQQ"
+    "AAGvRYgsAAAAAElFTkSuQmCC"
+)
+
+# Brand templateImage PNGs (32×32 black-on-alpha; NSMenu auto-tints).
+# Used on the per-session "logo + session id" footer row in the dropdown
+# so each session is clearly tagged with its source CLI. Rendered from
+# assets/{claude,codex}.svg via rsvg-convert.
+SOURCE_LOGOS = {
+    "claude": (
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADSElEQVR42q2XV2gVQRSGv3ht"
+        "SVSCUTQqKqKCBX2wYcWGHcWoWIINBFGwBCEQsSBYwILGFwuIBXxTRCRiAyXBXhD7gwUsiRpN"
+        "QtQkGs368i8chru3bHJguTunzPl35sx/5kJsaQU8Ar4Cu2L4NQEWA11pZNkFeHr+Ab0D/LbK"
+        "5wUQSSZBkzj2Gsd3bYDfIv12EtBGk35AnVmFn0DbAKAecDeKrTmwFJgTFsReA8ADNjr2NsZ2"
+        "0rG1BK7KVg9MDQOgDVBqkpRoYl96GtsGo48A5xzwe2IlGqolLgVmO7blzkTrjW2E0Y83+oNO"
+        "TD0wPBaAfMd5N9DUFOA9Y/8MpMs218S0DQDsATvjLfUAoNoJugF0kH2UY8uTPlfjd2Ylaxzf"
+        "K4kez74iHs/Z8wmynzX6MqA1sE/jc0A74L0T/wFon0zRtQD2a0ktCW0H+gB/jD4fOKX3bUCh"
+        "k7wOGBn2+I0F3jgTFptj5QFPTNKSKPue31AiSgcKtAJewPMjQH8rgGm7AzOAlUBmokDGRFmN"
+        "WM8/YAjQC8jRRxQDlY7feYAsFV9H0WasznjIqY1YAMrj+LwEZqUAn9REfPml4HIhrlI7/qh9"
+        "nhSC1yuAB8BD/d4Ul5ACZANrgAzRboaoNq0BtfMeKFKiYrVpL5pjSgJ9ICIwLYBUVXZOnLi3"
+        "ovQyHUW/Y5YD3/UUAc+T+aqBwLUE9v8PcAx4GqdefgMLEkmcpQn9o1gNnIgD4rqKNhOYqS54"
+        "2yExT7pASQM2q0P6AUXqfq/NOAjE7SjnPA0YB2xRL2kVlHyyONyfrApYre54Wbo7wDq9Fzq3"
+        "plfmqHVLlvncs37R3Hb9y2cl0EME4wHTgQsmJtdQ9kegf6IACswk33TV9mWSqYP50l3SeLBY"
+        "r1bjCn35YY2/A8MSAbAEuA8cNfcAn7+/abIjRv9Fui4abzIfUChdHvBXPWNiGFJJFYN5Olqp"
+        "0nczNyGfwpsBjw2IZdKPFy/UAqOTBXDcFFdfo882W2VlkLnKVwCdpe+oelqYTPIVhjSmOLYd"
+        "sj2LEme34gAN5PS/wLwotitKcC2KLWI44kxDAEwGpgX8pfN7++kYDLpKp6PRJV1t29OlNLRE"
+        "QsbVqdOlqxbKwgL4D4WtcTe8bgE+AAAAAElFTkSuQmCC"
+    ),
+    "codex": (
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADn0lEQVR42rWXW4iNURTHf8Zh"
+        "cosZKS+Y3CW5JuQychuXBy8epVxjmpASGbcUknELpRTmjYjEjEikJiKRu9wTmmHIJTPnnBmf"
+        "l/83Lbt9zvnOaHadZr611157rbX/67/XhuijO7AaqAI+AL+B58BJYDbQihYci4DvQJDmdw/o"
+        "n63hKF7vBtbo/wfAcWXhG1AAFAHLgA6SlQLtgBjwUbqvmxv5UkX3B9ggo74xGYinyc51YEy2"
+        "m3cEPsvAthQ6nYFdQL3Z7AlwFigH7gINkjcAa6Nu3gM4pIVvPZG3VtqrzcaXgHEeWwOA00Zv"
+        "ZbqN+wPnlfJwQamjM1VYCOefArMiYG2H9OPAYJ/SHOCXMdyov3ONzlEzXwuUAG0cO8OBvimc"
+        "uKG15e7kWCCpyZvAMOCFvm1aE/rtB/IdG32AM1qT1BF2dXQmab4OaBsKc1UmAVChb1I4kPQA"
+        "0gLxK3DNZOmrzjzMUhvgp+ZGhQaWSFDtROVzoAHY7AFiEjhoIp4BPHIqo0hzbySbEhq9LMEW"
+        "J7J0DrhAfA1Mc9bHgBWmlAPgosjqH7s1EkyI6ECNE9V0E+15Dx13AfY4RJUUczadawAMiujA"
+        "F6DY4YYYsFzOJYAybeyW+B3jwHg3A4URHdiYpt7XaU1CqV8urFjAV0jnDZCbo1sMCwqNOv0d"
+        "5NRypgssAIYAt4DDwH0TRBxYIOAWAPMBFpsqyDOGxpmzvQAMFDltypCBP+Z7oda/c/R2Gvr+"
+        "hwcuOMxmkZyQzuYsHBhrWNOOiSbopmjDDap0gbhILlMKax1ycR2N4sBgyetDQXvjQAiivc6R"
+        "APQDzknnme4PSzrVER0olPyTzUAgkqg0jvhKLgTsS6P3UHwQ9Qi2Sl5pDQZqMgFmimjCDR4r"
+        "UkTXB5SlGpVaLAsM5Ok7EEgBGCnBdyDHnGuJshA6ck2L4+oVXbLZmMGBXAE9AF6Zi4+2qnsf"
+        "JecD+wxGznru+zzRbUKl6nNgqOkH4sBot4ROaPJKCrIpULPhXjjFTpaOmfmZprkJG5wfnour"
+        "ifHqMzShdhQJGz6chGO9mW/QI6Z3OqMlZsEpRe2OUYbPA9X+Ck+lxNQvBuoVukXtiNeYG7IR"
+        "uK20nnIqI6Fz75LCzgYD7Pxs3wSjgatOd2x/cQ9Y7YW11px58f88zXqJpHoqK3XAdkX9DTgi"
+        "MnkPdBLqlwIjtP5wJgeaM4boxZPuofoLWNWSr+UcYJ5w8VbVU6uLrFRP+UjjLxfEfc6DyjWY"
+        "AAAAAElFTkSuQmCC"
+    ),
+}
 
 # Real macOS app icons used as the row image on the dropdown's
 # 'Return to Tab' submenu item, so each session shows the actual
@@ -386,7 +441,7 @@ DEFAULT_NOTIFICATIONS = {
     "include_summary":  True,
 }
 
-# Full official Claude Code hook surface. install_settings.py iterates this so
+# Full official Claude Code hook surface. install_claude_hooks.py iterates this so
 # disabling an event in the user config (set null) actually removes our prior
 # wiring instead of leaving a stale entry behind.
 ALL_EVENTS = (
@@ -706,7 +761,7 @@ def plugin_filename_for(refresh_interval_ms: int) -> str:
     """
     ms = max(MIN_REFRESH_INTERVAL_MS, int(refresh_interval_ms))
     suffix = f"{ms // 1000}s" if ms % 1000 == 0 else f"{ms}ms"
-    return f"claude-status.{suffix}.sh"
+    return f"agent-status.{suffix}.sh"
 
 
 # ── State files ──────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from claudebar import (  # noqa: E402
+from agentstatus import (  # noqa: E402
     CONFIG_PATH, DEFAULT_NOTIFICATIONS, STATE_DIR,
 )
 

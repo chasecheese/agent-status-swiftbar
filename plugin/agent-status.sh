@@ -9,7 +9,7 @@
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 # <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
 
-# Thin wrapper. The real plugin logic lives in claude-swiftbar-plugin.py
+# Thin wrapper. The real plugin logic lives in agent-status-plugin.py
 # (deployed alongside the hook by install.sh) so the file SwiftBar reads
 # is just metadata + an exec.
-exec /usr/bin/python3 "$HOME/.claude/scripts/claude-swiftbar-plugin.py"
+exec /usr/bin/python3 "$HOME/.claude/scripts/agent-status-plugin.py"

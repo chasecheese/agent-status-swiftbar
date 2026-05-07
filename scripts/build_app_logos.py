@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Refresh ``APP_LOGOS`` in ``lib/claudebar.py`` from /Applications.
+"""Refresh ``APP_LOGOS`` in ``lib/agentstatus.py`` from /Applications.
 
 Walks a hardcoded list of host apps we know how to detect, pulls each
 .app's `.icns` icon, downsamples to 32×32 PNG with ``sips``, base64-encodes,
-and rewrites the ``APP_LOGOS = {...}`` block in ``lib/claudebar.py``.
+and rewrites the ``APP_LOGOS = {...}`` block in ``lib/agentstatus.py``.
 
 Run when:
 - A new host app is added to the list below.
@@ -21,7 +21,7 @@ import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LIB_PATH = REPO_ROOT / "lib" / "claudebar.py"
+LIB_PATH = REPO_ROOT / "lib" / "agentstatus.py"
 
 APPS = [
     # Terminals
@@ -105,7 +105,7 @@ def main() -> int:
         flags=re.DOTALL,
     )
     if n != 1:
-        print("ERROR: APP_LOGOS = {...} block not found in claudebar.py")
+        print("ERROR: APP_LOGOS = {...} block not found in agentstatus.py")
         return 1
     LIB_PATH.write_text(new_src)
     print(f"  wrote -> {LIB_PATH} ({len(items)} apps)")

@@ -40,12 +40,12 @@ The installer is idempotent and lays files out like this:
 
 ```text
 ~/.claude/scripts/
-  ├── claudebar.py                       shared lib (paths, defaults, helpers)
-  ├── claude-swiftbar-hook.py            hook entry — writes per-session state
-  └── claude-swiftbar-plugin.py          plugin entry — renders dropdown
+  ├── agentstatus.py                       shared lib (paths, defaults, helpers)
+  ├── agent-status-hook.py            hook entry — writes per-session state
+  └── agent-status-plugin.py          plugin entry — renders dropdown
 ~/.claude/swiftbar-config.json           user config (preserved across installs)
 ~/.claude/settings.json                  patched: our hook routes wired in (backed up)
-<SwiftBar plugins>/claude-status.<N>.sh  thin bash wrapper SwiftBar runs
+<SwiftBar plugins>/agent-status.<N>.sh  thin bash wrapper SwiftBar runs
 ```
 
 `SWIFTBAR_PLUGIN_DIR=/path ./install.sh` overrides plugin folder detection.
@@ -57,12 +57,12 @@ Other tools' hooks on the same Claude Code events are preserved.
 ```text
               ┌─── hook fires (PreToolUse / Stop / Notification / ...) ───┐
 Claude Code ──┤                                                           │
-              │   /usr/bin/python3 claude-swiftbar-hook.py <state>        │
+              │   /usr/bin/python3 agent-status-hook.py <state>        │
               │   writes ~/.claude/state/swiftbar/<session_id>.json       │
               └───────────────────────────────────────────────────────────┘
                                        │
                                        ▼
-SwiftBar (every refresh_interval_ms) ──► claude-swiftbar-plugin.py
+SwiftBar (every refresh_interval_ms) ──► agent-status-plugin.py
                                             • reads all state files
                                             • picks highest-priority state
                                             • emits SwiftBar markup
@@ -125,7 +125,7 @@ Everything tunable lives in `~/.claude/swiftbar-config.json`:
 }
 ```
 
-- **`refresh_interval_ms`** — how often SwiftBar re-runs the plugin, in milliseconds. Floored at 100ms. Encoded into the plugin filename (e.g. `claude-status.500ms.sh`) by `install.sh`; this key needs a re-install to take effect.
+- **`refresh_interval_ms`** — how often SwiftBar re-runs the plugin, in milliseconds. Floored at 100ms. Encoded into the plugin filename (e.g. `agent-status.500ms.sh`) by `install.sh`; this key needs a re-install to take effect.
 - **`icons`** — dropdown row icons. State name → [SF Symbol](https://developer.apple.com/sf-symbols/) name.
 - **`header_icons`** — menu-bar icons. Optional; falls back per-state to `icons` when missing. Lets you keep the menu bar simple and the dropdown more descriptive.
 - **`notify_icons`** — icons used in each session row's `Notify on:` toggle list. Optional; falls back per-state to `icons`.
@@ -184,16 +184,16 @@ Clicks write `notify_states` into the session's state file. Each session is inde
 ```text
 .
 ├── install.sh / uninstall.sh
-├── lib/claudebar.py              shared utilities (single source of truth)
-├── hook/claude-swiftbar-hook.py  thin hook entry
+├── lib/agentstatus.py              shared utilities (single source of truth)
+├── hook/agent-status-hook.py  thin hook entry
 ├── plugin/
-│   ├── claude-status.sh          SwiftBar wrapper (metadata + exec python entry)
-│   ├── claude-status.py          plugin entry (renders dropdown)
+│   ├── agent-status.sh          SwiftBar wrapper (metadata + exec python entry)
+│   ├── agent-status.py          plugin entry (renders dropdown)
 │   ├── toggle.py                 dropdown click callback (toggles notification prefs)
 │   └── swiftbar-config.json      seed config (deployed to ~/.claude/)
-├── scripts/install_settings.py   patches ~/.claude/settings.json
-├── scripts/uninstall_settings.py reverses the patcher
-└── tests/                        pytest suite for the pure logic in claudebar.py
+├── scripts/install_claude_hooks.py   patches ~/.claude/settings.json
+├── scripts/uninstall_claude_hooks.py reverses the patcher
+└── tests/                        pytest suite for the pure logic in agentstatus.py
 ```
 
 ## Development
@@ -208,13 +208,13 @@ uv sync --group dev
 uv run pytest
 
 # run a single test file
-uv run pytest tests/test_claudebar.py -v
+uv run pytest tests/test_agentstatus.py -v
 ```
 
 The dependency surface is intentionally tiny:
 
 - `pyproject.toml` declares `pytest` in the `[dependency-groups].dev` group
-- `[tool.pytest.ini_options].pythonpath = ["lib"]` lets tests import `claudebar` directly
+- `[tool.pytest.ini_options].pythonpath = ["lib"]` lets tests import `agentstatus` directly
 - `[tool.uv].package = false` keeps `uv sync` from trying to build a wheel
 - No production dependencies — everything the deployed scripts need ships with macOS
 

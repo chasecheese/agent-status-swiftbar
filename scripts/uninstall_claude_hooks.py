@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "lib"))
-from claudebar import HOOK_PATH, SETTINGS_PATH  # noqa: E402
+from agentstatus import HOOK_PATH, SETTINGS_PATH  # noqa: E402
 
 
 def is_ours(cmd) -> bool:

@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "plugin"))
 
-import claudebar  # noqa: E402
+import agentstatus  # noqa: E402
 
 _toggle_spec = importlib.util.spec_from_file_location(
     "claude_swiftbar_toggle", REPO_ROOT / "plugin" / "toggle.py",
@@ -27,8 +27,8 @@ _toggle_spec.loader.exec_module(toggle)
 
 # ── Config defaults / merging ────────────────────────────────────────────────
 def test_load_config_defaults_for_notifications(tmp_path):
-    cfg = claudebar.load_config(tmp_path / "missing.json")
-    assert cfg["notifications"] == claudebar.DEFAULT_NOTIFICATIONS
+    cfg = agentstatus.load_config(tmp_path / "missing.json")
+    assert cfg["notifications"] == agentstatus.DEFAULT_NOTIFICATIONS
 
 
 def test_load_config_user_notifications_override(tmp_path):
@@ -40,7 +40,7 @@ def test_load_config_user_notifications_override(tmp_path):
             "sound_name": "Submarine",
         }
     }))
-    n = claudebar.load_config(p)["notifications"]
+    n = agentstatus.load_config(p)["notifications"]
     assert n["enabled_states"] == ["waiting"]
     assert n["sound"] is True
     assert n["sound_name"] == "Submarine"
@@ -52,7 +52,7 @@ def test_load_config_filters_unknown_states_in_enabled(tmp_path):
     p.write_text(json.dumps({
         "notifications": {"enabled_states": ["asking", "bogus", 42]}
     }))
-    n = claudebar.load_config(p)["notifications"]
+    n = agentstatus.load_config(p)["notifications"]
     assert n["enabled_states"] == ["asking"]
 
 
@@ -60,52 +60,52 @@ def test_load_config_filters_unknown_states_in_enabled(tmp_path):
 def test_effective_states_uses_record_override():
     record = {"notify_states": ["waiting"]}
     notif = {"enabled_states": ["asking"]}
-    assert claudebar.effective_enabled_states(record, notif) == ["waiting"]
+    assert agentstatus.effective_enabled_states(record, notif) == ["waiting"]
 
 
 def test_effective_states_explicit_empty_silences_session():
     record = {"notify_states": []}
     notif = {"enabled_states": ["asking"]}
-    assert claudebar.effective_enabled_states(record, notif) == []
+    assert agentstatus.effective_enabled_states(record, notif) == []
 
 
 def test_effective_states_falls_back_to_global_when_no_override():
     record = {}  # no notify_states key
     notif = {"enabled_states": ["asking", "idle"]}
-    assert claudebar.effective_enabled_states(record, notif) == ["asking", "idle"]
+    assert agentstatus.effective_enabled_states(record, notif) == ["asking", "idle"]
 
 
 def test_effective_states_ignores_non_list_override():
     record = {"notify_states": None}
     notif = {"enabled_states": ["asking"]}
-    assert claudebar.effective_enabled_states(record, notif) == ["asking"]
+    assert agentstatus.effective_enabled_states(record, notif) == ["asking"]
 
 
 # ── maybe_notify gating ──────────────────────────────────────────────────────
 def test_maybe_notify_skips_when_state_unchanged(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify("asking", "asking", "x", "/tmp", {},
+    agentstatus.maybe_notify("asking", "asking", "x", "/tmp", {},
                            {"enabled_states": ["asking"]})
     assert calls == []
 
 
 def test_maybe_notify_skips_when_state_not_in_effective(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify("working", "idle", "x", "/tmp", {},
+    agentstatus.maybe_notify("working", "idle", "x", "/tmp", {},
                            {"enabled_states": ["asking"]})
     assert calls == []
 
 
 def test_maybe_notify_fires_on_enabled_transition(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.shutil, "which", lambda name: None)
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify(
+    agentstatus.maybe_notify(
         "asking", "working", "my project", "/tmp", {},
         {"enabled_states": ["asking"], "include_summary": True},
     )
@@ -119,9 +119,9 @@ def test_maybe_notify_fires_on_enabled_transition(monkeypatch):
 def test_maybe_notify_session_override_takes_precedence(monkeypatch):
     """Session has notify_states=[] → silenced even if global says asking."""
     calls = []
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify(
+    agentstatus.maybe_notify(
         "asking", "working", "x", "/tmp",
         {"notify_states": []},
         {"enabled_states": ["asking"]},
@@ -131,10 +131,10 @@ def test_maybe_notify_session_override_takes_precedence(monkeypatch):
 
 def test_maybe_notify_includes_sound_when_requested(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.shutil, "which", lambda name: None)
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify(
+    agentstatus.maybe_notify(
         "asking", "working", "x", "", {},
         {"enabled_states": ["asking"], "sound": True, "sound_name": "Glass"},
     )
@@ -143,45 +143,45 @@ def test_maybe_notify_includes_sound_when_requested(monkeypatch):
 
 
 def test_click_command_shell_terminal_uses_tty(tmp_path):
-    cmd = claudebar.click_command_shell("Terminal", "/dev/ttys015", "/tmp/foo")
-    assert cmd.startswith(claudebar.OSASCRIPT)
+    cmd = agentstatus.click_command_shell("Terminal", "/dev/ttys015", "/tmp/foo")
+    assert cmd.startswith(agentstatus.OSASCRIPT)
     assert "/dev/ttys015" in cmd
     assert 'tell application "Terminal"' in cmd
 
 
 def test_click_command_shell_iterm_uses_tty():
-    cmd = claudebar.click_command_shell("iTerm", "/dev/ttys020", "/tmp/foo")
+    cmd = agentstatus.click_command_shell("iTerm", "/dev/ttys020", "/tmp/foo")
     assert "tty of s is" in cmd
     assert "/dev/ttys020" in cmd
 
 
 def test_click_command_shell_vscode_uses_reuse_window(monkeypatch):
-    bin_path = claudebar.IDE_BIN["Visual Studio Code"]
-    monkeypatch.setattr(claudebar.Path, "exists", lambda self: True)
-    cmd = claudebar.click_command_shell("Visual Studio Code", "", "/projects/foo")
+    bin_path = agentstatus.IDE_BIN["Visual Studio Code"]
+    monkeypatch.setattr(agentstatus.Path, "exists", lambda self: True)
+    cmd = agentstatus.click_command_shell("Visual Studio Code", "", "/projects/foo")
     assert "--reuse-window" in cmd
     assert "/projects/foo" in cmd
     assert bin_path in cmd
 
 
 def test_click_command_shell_unknown_app_falls_back_to_activate():
-    cmd = claudebar.click_command_shell("Ghostty", "", "/tmp")
+    cmd = agentstatus.click_command_shell("Ghostty", "", "/tmp")
     assert 'tell application "Ghostty" to activate' in cmd
 
 
 def test_click_command_shell_empty_when_nothing_known():
-    assert claudebar.click_command_shell("", "", "") == ""
+    assert agentstatus.click_command_shell("", "", "") == ""
 
 
 def test_maybe_notify_passes_execute_when_terminal_notifier_present(monkeypatch):
     """terminal-notifier path must include -execute with the focus command."""
     calls = []
-    monkeypatch.setattr(claudebar.shutil, "which",
+    monkeypatch.setattr(agentstatus.shutil, "which",
                         lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None)
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
     record = {"terminal_app": "Terminal", "tty": "/dev/ttys001"}
-    claudebar.maybe_notify("asking", "working", "x", "/tmp", record,
+    agentstatus.maybe_notify("asking", "working", "x", "/tmp", record,
                            {"enabled_states": ["asking"]})
     assert len(calls) == 1
     argv = calls[0][0][0]
@@ -194,12 +194,12 @@ def test_maybe_notify_passes_execute_when_terminal_notifier_present(monkeypatch)
 
 def test_maybe_notify_skips_execute_when_no_terminal_app(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.shutil, "which",
+    monkeypatch.setattr(agentstatus.shutil, "which",
                         lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None)
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
     record = {"terminal_app": "", "tty": ""}
-    claudebar.maybe_notify("asking", "working", "x", "/tmp", record,
+    agentstatus.maybe_notify("asking", "working", "x", "/tmp", record,
                            {"enabled_states": ["asking"]})
     argv = calls[0][0][0]
     assert "-execute" not in argv
@@ -207,10 +207,10 @@ def test_maybe_notify_skips_execute_when_no_terminal_app(monkeypatch):
 
 def test_maybe_notify_escapes_quotes_in_summary(monkeypatch):
     calls = []
-    monkeypatch.setattr(claudebar.shutil, "which", lambda name: None)
-    monkeypatch.setattr(claudebar.subprocess, "run",
+    monkeypatch.setattr(agentstatus.shutil, "which", lambda name: None)
+    monkeypatch.setattr(agentstatus.subprocess, "run",
                         lambda *a, **kw: calls.append((a, kw)))
-    claudebar.maybe_notify(
+    agentstatus.maybe_notify(
         "asking", "working", 'said "hello" then', "", {},
         {"enabled_states": ["asking"]},
     )
@@ -223,8 +223,8 @@ def _patch_paths(monkeypatch, tmp_path):
     cfg_path = tmp_path / "swiftbar-config.json"
     state_dir = tmp_path / "state"
     state_dir.mkdir()
-    monkeypatch.setattr(claudebar, "CONFIG_PATH", cfg_path)
-    monkeypatch.setattr(claudebar, "STATE_DIR", state_dir)
+    monkeypatch.setattr(agentstatus, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(agentstatus, "STATE_DIR", state_dir)
     monkeypatch.setattr(toggle, "CONFIG_PATH", cfg_path)
     monkeypatch.setattr(toggle, "STATE_DIR", state_dir)
     return cfg_path, state_dir

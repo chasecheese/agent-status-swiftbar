@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code hook -> per-session state file for the SwiftBar plugin.
 
-Usage: claude-swiftbar-hook.py <state>
+Usage: agent-status-hook.py <state>
 
 Reads the hook payload from stdin and writes
 ``~/.claude/state/swiftbar/<session_id>.json``. State value ``end`` deletes
@@ -15,9 +15,9 @@ import sys
 import tempfile
 import time
 
-# claudebar.py is deployed alongside this script in ~/.claude/scripts/.
+# agentstatus.py is deployed alongside this script in ~/.claude/scripts/.
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from claudebar import (  # noqa: E402
+from agentstatus import (  # noqa: E402
     PROMPT_MAX_LEN, STATE_DIR,
     find_terminal_app, get_tty_of, latest_ai_title,
     load_config, maybe_notify,

@@ -27,7 +27,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "lib"))
-from claudebar import (  # noqa: E402
+from agentstatus import (  # noqa: E402
     ALL_CODEX_EVENTS, CODEX_DIR, CODEX_HOOKS_PATH,
     HOOK_PATH, PYTHON, load_config,
 )

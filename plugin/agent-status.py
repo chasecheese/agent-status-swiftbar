@@ -2,7 +2,7 @@
 """SwiftBar plugin entry — renders the menu bar status from state files.
 
 Invoked by the deployed bash wrapper at every SwiftBar refresh tick. All
-shared logic lives in ``claudebar.py`` (deployed to ``~/.claude/scripts/``);
+shared logic lives in ``agentstatus.py`` (deployed to ``~/.claude/scripts/``);
 this file only assembles SwiftBar-flavoured stdout.
 """
 from __future__ import annotations
@@ -13,9 +13,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from claudebar import (  # noqa: E402
-    APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS, SUMMARY_MAX_LEN,
-    TOGGLE_PATH,
+from agentstatus import (  # noqa: E402
+    APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, SOURCE_LOGOS, STATE_LABELS,
+    SUMMARY_MAX_LEN, TOGGLE_PATH, TRANSPARENT_ICON_16,
     aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
 
@@ -153,6 +153,8 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     label = STATE_LABELS.get(state, state)
     age = humanage(now, r.get("since", 0))
     state_icon = icons.get(state, "circle")
+    source = (r.get("source") or "claude").strip().lower()
+    session_id = (r.get("session_id") or "").strip()
 
     terminal_app = (r.get("terminal_app") or "").strip()
     tty = (r.get("tty") or "").strip()
@@ -198,6 +200,33 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
         print(f"-- Return to Tab | {icon_attr} {click}")
     print("-----")
     render_notify_toggles(r, priority, notifications, notify_icons)
+    render_session_footer(source, session_id)
+
+
+# Width budget for the session-id row before we wrap to a continuation
+# row. 20 chars fits comfortably under the dropdown's natural width with
+# the brand logo to its left; a UUID (36 chars) wraps onto two lines.
+SID_CHUNK = 20
+
+
+def render_session_footer(source: str, session_id: str) -> None:
+    """Per-session footer: separator + brand logo + session id, with the
+    id wrapped onto continuation rows. Each continuation row carries a
+    16×16 transparent placeholder so its text aligns under the id (not
+    under the brand logo) — NSMenu doesn't auto-reserve the icon column
+    for rows that omit `image=`."""
+    if not session_id:
+        return
+    logo = SOURCE_LOGOS.get(source) or SOURCE_LOGOS.get("claude")
+    print("-----")
+    chunks = [session_id[i:i + SID_CHUNK]
+              for i in range(0, len(session_id), SID_CHUNK)] or [""]
+    head, tail = chunks[0], chunks[1:]
+    print(f"-- {head} | templateImage={logo} width=16 height=16 "
+          f"color=gray size=11")
+    for cont in tail:
+        print(f"-- {cont} | image={TRANSPARENT_ICON_16} width=16 height=16 "
+              f"color=gray size=11")
 
 
 def main() -> None:

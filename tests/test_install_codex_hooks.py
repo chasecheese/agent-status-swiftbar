@@ -20,7 +20,7 @@ def test_is_ours_requires_source_codex():
     assert ins.is_ours(ins.make_command("asking"))
     # Claude-style command (no --source=codex) is NOT ours under this patcher.
     assert not ins.is_ours(
-        '"/usr/bin/python3" "/Users/x/.claude/scripts/claude-swiftbar-hook.py" asking'
+        '"/usr/bin/python3" "/Users/x/.claude/scripts/agent-status-hook.py" asking'
     )
     # Some other tool's command, completely unrelated.
     assert not ins.is_ours("/bin/some-other-tool")
