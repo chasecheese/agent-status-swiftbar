@@ -56,6 +56,15 @@ DEFAULT_ICONS = {
     "none":    "circle.dotted",
 }
 DEFAULT_PRIORITY = ["asking", "working", "waiting"]
+# Per-action SF Symbols used by the dropdown rows that aren't tied to a
+# session state — Open Folder, Return to Tab (jump-to-window), and the
+# small info icon in front of Notification messages.
+DEFAULT_ACTION_ICONS = {
+    "open_folder":    "folder",
+    "return_to_tab":  "arrow.up.right.square",
+    "message":        "info.circle",
+}
+
 DEFAULT_NOTIFICATIONS = {
     # No notifications enabled out of the box — opt in via the dropdown's
     # per-session toggles (writes notify_states into that session's state).
@@ -307,6 +316,12 @@ def load_config(path: Path | None = None) -> dict:
     if isinstance(cfg.get("events"), dict):
         events.update(_filter_events(cfg["events"], allowed_states))
 
+    action_icons = dict(DEFAULT_ACTION_ICONS)
+    if isinstance(cfg.get("action_icons"), dict):
+        for k, v in cfg["action_icons"].items():
+            if isinstance(v, str) and v and k in DEFAULT_ACTION_ICONS:
+                action_icons[k] = v
+
     notifications = dict(DEFAULT_NOTIFICATIONS)
     if isinstance(cfg.get("notifications"), dict):
         user_notif = cfg["notifications"]
@@ -328,6 +343,7 @@ def load_config(path: Path | None = None) -> dict:
         "icons": icons,
         "header_icons": header_icons,
         "notify_icons": notify_icons,
+        "action_icons": action_icons,
         "priority": priority,
         "events": events,
         "notifications": notifications,

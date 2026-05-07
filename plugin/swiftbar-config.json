@@ -1,21 +1,26 @@
 {
   "refresh_interval_ms": 500,
   "icons": {
-    "asking":  "exclamationmark.bubble.circle.fill",
-    "working": "hourglass.circle.fill",
-    "waiting": "circle.badge.checkmark",
-    "none":    "circle.dotted"
-  },
-  "header_icons": {
-    "asking":  "exclamationmark.circle.fill",
-    "working": "hourglass",
+    "asking":  "exclamationmark.circle",
+    "working": "hourglass.circle",
     "waiting": "checkmark.circle",
     "none":    "circle.dotted"
   },
+  "header_icons": {
+    "asking":  "circle.badge.exclamationmark",
+    "working": "hourglass.circle",
+    "waiting": "circle.badge.checkmark",
+    "none":    "circle.dotted"
+  },
   "notify_icons": {
-    "asking":  "exclamationmark.bubble.circle.fill",
+    "asking":  "exclamationmark.circle.fill",
     "working": "hourglass.circle.fill",
-    "waiting": "circle.badge.checkmark"
+    "waiting": "checkmark.circle.fill"
+  },
+  "action_icons": {
+    "open_folder":   "folder.fill",
+    "return_to_tab": "apple.terminal.fill",
+    "message":       "info.circle"
   },
   "priority": [
     "asking",

@@ -106,15 +106,17 @@ def render_notify_toggles(record: dict, priority: list[str],
     if not session_id:
         return
     enabled = set(effective_enabled_states(record, notifications))
-    print("-- Notify on: | color=gray size=11")
     for state in priority:
         on = state in enabled
-        mark = "✓" if on else "  "
         label = STATE_LABELS.get(state, state)
         icon = notify_icons.get(state, "circle")
+        # Native NSMenu checkbox: `checked=true|false` sets state=.on/off,
+        # which gives a real macOS checkmark and reserves the checkmark
+        # column for the whole submenu so unchecked rows align under
+        # checked ones.
+        checked = "true" if on else "false"
         print(
-            f"-- {mark} {label} | "
-            f"sfimage={icon} "
+            f"-- {label} | checked={checked} sfimage={icon} "
             f"bash='{TOGGLE_PATH}' param1='--session' param2='{session_id}' "
             f"param3='--state' param4='{state}' "
             f"refresh=true terminal=false"
@@ -122,7 +124,8 @@ def render_notify_toggles(record: dict, priority: list[str],
 
 
 def render_row(r: dict, now: int, icons: dict, priority: list[str],
-               notifications: dict, notify_icons: dict) -> None:
+               notifications: dict, notify_icons: dict,
+               action_icons: dict) -> None:
     state = r.get("state", "?")
     cwd = r.get("cwd", "") or ""
     short_cwd = Path(cwd).name if cwd else ""
@@ -136,25 +139,28 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     age = humanage(now, r.get("since", 0))
     line = f"{label}  {summary_text}  ({age} ago)"
 
+    terminal_app = (r.get("terminal_app") or "").strip()
+    tty = (r.get("tty") or "").strip()
+    click = click_action(terminal_app, tty, cwd)
+
     params = [f"sfimage={icons.get(state, 'circle')}"]
-    click = click_action(
-        (r.get("terminal_app") or "").strip(),
-        (r.get("tty") or "").strip(),
-        cwd,
-    )
     if click:
         params.append(click)
     elif cwd:
         params.append(f"href=file://{cwd}")
     print(f"{line} | {' '.join(params)}")
 
-    if (r.get("prompt") or "").strip() and short_cwd:
-        print(f"-- in {short_cwd} | color=gray size=11")
     if msg:
-        print(f"-- {msg.replace(chr(10), ' ')[:MESSAGE_MAX_LEN]} | color=gray size=11")
+        msg_short = msg.replace(chr(10), " ")[:MESSAGE_MAX_LEN]
+        print(f"-- {msg_short} | sfimage={action_icons['message']} color=gray size=11")
     if cwd:
-        print(f"-- Open folder | bash='/usr/bin/open' param1='{cwd}' terminal=false")
-    print("-- ---")
+        print(
+            f"-- Open Folder | sfimage={action_icons['open_folder']} "
+            f"bash='/usr/bin/open' param1='{cwd}' terminal=false"
+        )
+    if click:
+        print(f"-- Return to Tab | sfimage={action_icons['return_to_tab']} {click}")
+    print("-----")
     render_notify_toggles(r, priority, notifications, notify_icons)
 
 
@@ -171,7 +177,8 @@ def main() -> None:
         now = int(time.time())
         for r in records:
             render_row(r, now, cfg["icons"], cfg["priority"],
-                       cfg["notifications"], cfg["notify_icons"])
+                       cfg["notifications"], cfg["notify_icons"],
+                       cfg["action_icons"])
 
     print("---")
     print("Refresh | refresh=true")

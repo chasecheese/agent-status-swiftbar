@@ -165,6 +165,29 @@ def test_header_icons_filtered_against_vocabulary(tmp_path):
     assert cfg["header_icons"]["working"] == "hourglass"
 
 
+def test_action_icons_default_when_missing(tmp_path):
+    cfg = claudebar.load_config(tmp_path / "missing.json")
+    assert cfg["action_icons"] == claudebar.DEFAULT_ACTION_ICONS
+
+
+def test_action_icons_user_override_known_keys(tmp_path):
+    p = tmp_path / "swiftbar-config.json"
+    p.write_text(json.dumps({
+        "action_icons": {
+            "open_folder":   "folder.fill",
+            "return_to_tab": "arrow.uturn.left",
+            "unknown_key":   "should-be-ignored",
+        }
+    }))
+    cfg = claudebar.load_config(p)
+    assert cfg["action_icons"]["open_folder"] == "folder.fill"
+    assert cfg["action_icons"]["return_to_tab"] == "arrow.uturn.left"
+    # Unspecified key keeps its default
+    assert cfg["action_icons"]["message"] == claudebar.DEFAULT_ACTION_ICONS["message"]
+    # Unknown key dropped (action_icons schema is closed)
+    assert "unknown_key" not in cfg["action_icons"]
+
+
 def test_default_notifications_are_off(tmp_path):
     """Out of the box no state is enabled — opt-in via the dropdown."""
     cfg = claudebar.load_config(tmp_path / "missing.json")
