@@ -9,10 +9,12 @@ Produces two tables in ``lib/claudebar.py``:
 
 - ``APP_BRAND_STATE_PILLS`` — 3-icon ``(host_app, brand, state)`` pill
   with the host icon kept full-colour and the brand/state silhouettes
-  rendered against a fixed pill background. Two variants per cell
-  (light + dark). Plugin emits ``image=<light_b64>,<dark_b64>`` so
-  SwiftBar's built-in light/dark image picker chooses without us
-  shelling out to ``defaults read`` each tick.
+  rendered against a single dark pill background (white foreground).
+  Single variant — SwiftBar has no built-in appearance picker for
+  ``image=`` and per-tick ``defaults read`` is too slow for the
+  dropdown, so we ship one design that reads in both menu modes:
+  prominent on light dropdown bg, "blends in" on dark bg with the
+  host icon and white silhouettes still clearly visible.
 
 Run when:
 - the brand assets, state list, or pill geometry/palette changes
@@ -79,21 +81,24 @@ P2_STATE = 14 * P2_SCALE        # state slightly bigger for visual balance
 P2_PAD_X = 2 * P2_SCALE
 
 
-# ── 3-icon pill (full-colour, light + dark variants) ─────────────────────────
-P3_SCALE = 2                    # 2× keeps the palette PNGs small (~900B each)
-P3_W = 44 * P3_SCALE
+# ── 3-icon pill (full-colour, single variant) ────────────────────────────────
+# Single design — SwiftBar has no built-in light/dark image picker, and
+# per-tick appearance detection is too slow for the dropdown. A
+# translucent mid-grey pill sits between the two dropdown backgrounds:
+# darkens against light bg, lightens against dark bg, so the host icon
+# (full colour) and the white silhouettes stay legible in both modes.
+# Tweak P3_BG/P3_FG here if the shade needs to shift.
+P3_SCALE = 3                    # 3× source for retina @3x sharpness (matches P2)
+P3_W = 48 * P3_SCALE
 P3_H = 16 * P3_SCALE
 P3_RADIUS = 4 * P3_SCALE
-P3_ICON = 12 * P3_SCALE         # uniform icon size for symmetric layout
+# Layout (logical): pad(2) + host(16) + gap(2) + brand(12) + gap(2) + state(12) + pad(2) = 48
+P3_HOST_ICON = 16 * P3_SCALE    # bumped from 12 — host needs more visual weight
+P3_ICON = 12 * P3_SCALE         # brand/state SF Symbols
 P3_PAD_X = 2 * P3_SCALE
 P3_GAP = 2 * P3_SCALE
-# Pill colours per appearance. SwiftBar's `image=<light>,<dark>` syntax
-# picks one based on the system Appearance, so we don't need a runtime
-# `defaults read AppleInterfaceStyle` call.
-P3_LIGHT_BG = (28, 28, 30, 255)
-P3_LIGHT_FG = (255, 255, 255, 255)
-P3_DARK_BG  = (244, 244, 247, 255)
-P3_DARK_FG  = (0, 0, 0, 255)
+P3_BG = (120, 120, 125, 220)    # translucent mid-grey
+P3_FG = (255, 255, 255, 255)    # white silhouettes for brand + state
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -178,30 +183,32 @@ def _solid_silhouette(alpha: Image.Image,
 
 def composite_3icon(host_rgba: Image.Image,
                     brand_alpha: Image.Image,
-                    state_alpha: Image.Image,
-                    pill_bg: tuple[int, int, int, int],
-                    fg: tuple[int, int, int, int]) -> bytes:
+                    state_alpha: Image.Image) -> bytes:
     pill_mask = Image.new("L", (P3_W, P3_H), 0)
     ImageDraw.Draw(pill_mask).rounded_rectangle(
         (0, 0, P3_W - 1, P3_H - 1), P3_RADIUS, fill=255,
     )
     pill = Image.new("RGBA", (P3_W, P3_H), (0, 0, 0, 0))
-    pill.paste(Image.new("RGBA", (P3_W, P3_H), pill_bg), (0, 0), pill_mask)
+    pill.paste(Image.new("RGBA", (P3_W, P3_H), P3_BG), (0, 0), pill_mask)
 
     cx = P3_PAD_X
-    pad_y = (P3_H - P3_ICON) // 2
     pill.alpha_composite(
-        host_rgba.resize((P3_ICON, P3_ICON), Image.LANCZOS),
-        (cx, pad_y),
+        host_rgba.resize((P3_HOST_ICON, P3_HOST_ICON), Image.LANCZOS),
+        (cx, (P3_H - P3_HOST_ICON) // 2),
     )
+    cx += P3_HOST_ICON + P3_GAP
+    pill.alpha_composite(_solid_silhouette(brand_alpha, P3_FG),
+                         (cx, (P3_H - P3_ICON) // 2))
     cx += P3_ICON + P3_GAP
-    pill.alpha_composite(_solid_silhouette(brand_alpha, fg), (cx, pad_y))
-    cx += P3_ICON + P3_GAP
-    pill.alpha_composite(_solid_silhouette(state_alpha, fg), (cx, pad_y))
+    pill.alpha_composite(_solid_silhouette(state_alpha, P3_FG),
+                         (cx, (P3_H - P3_ICON) // 2))
 
     out = Image.new("RGBA", (P3_W, P3_H), (0, 0, 0, 0))
     out.paste(pill, (0, 0), pill_mask)
-    return _png_bytes(out, palette=True)
+    # Translucent pill bg → can't use palette mode (it can only encode
+    # 1-bit alpha via a single transparent index). Stay in full RGBA;
+    # PNG compression still keeps each cell ~3-5 KB.
+    return _png_bytes(out)
 
 
 # ── Block writers ────────────────────────────────────────────────────────────
@@ -230,12 +237,9 @@ def render_3icon_block(table: dict, hosts: list[str]) -> str:
         for src in SOURCES:
             lines.append(f'        "{src}": {{')
             for state in STATES:
-                lines.append(f'            "{state}": {{')
-                for variant in ("light", "dark"):
-                    lines.append(f'                "{variant}": (')
-                    lines.extend(_wrap(table[host][src][state][variant], 20))
-                    lines.append("                ),")
-                lines.append("            },")
+                lines.append(f'            "{state}": (')
+                lines.extend(_wrap(table[host][src][state], 16))
+                lines.append("            ),")
             lines.append("        },")
         lines.append("    },")
     lines.append("}")
@@ -303,22 +307,16 @@ def main() -> int:
         for src in SOURCES:
             table3[host][src] = {}
             for state in STATES:
-                light_png = composite_3icon(
+                png = composite_3icon(
                     host_rgba, brand_alpha_p3[src], state_alpha_p3[state],
-                    P3_LIGHT_BG, P3_LIGHT_FG,
                 )
-                dark_png = composite_3icon(
-                    host_rgba, brand_alpha_p3[src], state_alpha_p3[state],
-                    P3_DARK_BG, P3_DARK_FG,
-                )
-                table3[host][src][state] = {
-                    "light": base64.b64encode(light_png).decode(),
-                    "dark":  base64.b64encode(dark_png).decode(),
-                }
+                table3[host][src][state] = base64.b64encode(png).decode()
     n_hosts = len(hosts)
-    n_3 = n_hosts * len(SOURCES) * len(STATES) * 2
+    n_3 = n_hosts * len(SOURCES) * len(STATES)
+    avg = sum(len(table3[h][s][st]) for h in hosts for s in SOURCES for st in STATES) // n_3
     print(f"  3-icon: {n_3} composites "
-          f"({n_hosts} hosts × {len(SOURCES)} brands × {len(STATES)} states × 2 variants)")
+          f"({n_hosts} hosts × {len(SOURCES)} brands × {len(STATES)} states) "
+          f"avg {avg}b base64")
 
     src_text = LIB_PATH.read_text()
     src_text = _replace_block(src_text, "STATE_BRAND_LOGOS", render_2icon_block(table2))
@@ -330,9 +328,9 @@ def main() -> int:
         idx = src_text.index(anchor)
         end = idx + len(anchor)
         header = (
-            "\n# 3-icon (host, brand, state) pills with light + dark variants.\n"
-            "# Plugin emits `image=<light_b64>,<dark_b64>` and SwiftBar picks\n"
-            "# the matching variant from the system Appearance.\n"
+            "\n# 3-icon (host, brand, state) pill — single full-colour PNG.\n"
+            "# Translucent grey bg + white silhouettes works in both menu\n"
+            "# modes; tune P3_BG in scripts/build_composites.py to shift.\n"
         )
         src_text = src_text[:end] + header + render_3icon_block(table3, hosts) + src_text[end:]
 

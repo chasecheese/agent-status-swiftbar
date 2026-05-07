@@ -14,16 +14,16 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from claudebar import (  # noqa: E402
-    APP_BRAND_STATE_PILLS, APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN,
-    STATE_BRAND_LOGOS, STATE_LABELS, SUMMARY_MAX_LEN, TOGGLE_PATH,
+    APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_LABELS, SUMMARY_MAX_LEN,
+    TOGGLE_PATH,
     aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
 
 
 def _lookup_ci(d: dict, key: str):
     """Case-insensitive dict lookup. Older state files sometimes wrote the
-    host name in a different case than APP_LOGOS / APP_BRAND_STATE_PILLS
-    keys (e.g. `claude` vs `Claude`); normalize at read time."""
+    host name in a different case than APP_LOGOS keys (e.g. `claude` vs
+    `Claude`); normalize at read time."""
     if not key:
         return None
     if key in d:
@@ -153,34 +153,16 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     label = STATE_LABELS.get(state, state)
     age = humanage(now, r.get("since", 0))
     state_icon = icons.get(state, "circle")
-    source = (r.get("source") or "claude").strip().lower()
 
     terminal_app = (r.get("terminal_app") or "").strip()
     tty = (r.get("tty") or "").strip()
     click = click_action(terminal_app, tty, cwd)
 
-    # Row image — three priority tiers:
-    #   1) 3-icon (host + brand + state) full-colour pill, with light + dark
-    #      variants. SwiftBar's `image=<light>,<dark>` syntax picks one
-    #      based on the system Appearance, so we don't shell out per tick.
-    #      Source is 88×32 (2×); displayed at 44×16 logical.
-    #   2) 2-icon (brand + state) template pill — auto-tinted by NSMenu.
-    #      Source 96×48 (3×); displayed 32×16. Used when the host isn't in
-    #      our bundled APP_LOGOS set.
-    #   3) Plain state SF Symbol (config-driven), if the brand isn't
-    #      claude/codex either.
-    pill3 = _lookup_ci(APP_BRAND_STATE_PILLS, terminal_app)
-    pill3 = (pill3 or {}).get(source, {}).get(state)
-    pill2 = STATE_BRAND_LOGOS.get(source, {}).get(state)
+    # Row image — just the state SF Symbol. Composite PNG pills (host +
+    # brand + state) made the dropdown noticeably slower to open, so we
+    # let NSMenu render the symbol natively.
     line = f"{label}  {summary_text}  ({age} ago)"
-    if pill3:
-        params = [
-            f"image={pill3['light']},{pill3['dark']} width=44 height=16",
-        ]
-    elif pill2:
-        params = [f"templateImage={pill2} width=32 height=16"]
-    else:
-        params = [f"sfimage={state_icon}"]
+    params = [f"sfimage={state_icon}"]
     if click:
         params.append(click)
     elif cwd:
