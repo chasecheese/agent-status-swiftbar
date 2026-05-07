@@ -1,171 +1,246 @@
-# claude-code-swiftbar
+# agent-status-swiftbar
 
-> **Know what every Claude Code session is doing — without alt-tabbing through ten terminals.**
+macOS menu-bar status for active Claude Code and Codex CLI sessions, rendered
+through [SwiftBar](https://swiftbar.app).
 
-A featherweight macOS menu bar status light for [Claude Code](https://claude.com/claude-code), built on [SwiftBar](https://swiftbar.app). One glance tells you whether anything needs you. One click drops you back into the exact tab.
+The plugin listens to agent hook events, writes one small state file per
+session, and lets SwiftBar aggregate those sessions into a single menu-bar
+symbol. Open the dropdown to see each session, its current state, age, working
+directory, latest prompt/summary, and shortcuts back to the originating tab or
+folder.
 
----
+## What It Shows
 
-## The problem
+`agent-status-swiftbar` tracks three live states:
 
-You kick off a long Claude Code task, tab away to read something, then forget:
+| State | Meaning |
+| --- | --- |
+| `asking` | The agent is waiting for permission or another user decision. |
+| `working` | The agent is processing a prompt or running tools. |
+| `waiting` | The session is alive and ready for the next prompt. |
 
-- Which terminal is it running in?
-- Did it finish?
-- Is it stuck on a permission prompt I missed?
-- Are the *other* two sessions still going?
+The menu-bar icon is chosen from the highest-priority state across all active
+sessions. By default, `asking` wins over `working`, and `working` wins over
+`waiting`.
 
-You end up sweeping through every iTerm tab and VS Code window guessing. claude-code-swiftbar just tells you.
+The dropdown includes:
 
----
-
-## What you get
-
-### 🟢 A status light in your menu bar
-
-The icon reflects the **most urgent state across all your active Claude Code sessions** — refreshed every 500ms.
-
-| Icon | State    | Meaning                                                       |
-| ---- | -------- | ------------------------------------------------------------- |
-| ❗    | ASKING   | Claude is waiting for permission or input — **act now**       |
-| ⏳    | WORKING  | Claude is running                                             |
-| ✓    | WAITING  | Idle session, or Claude finished a turn — your move           |
-| ⚪    | (none)   | No active sessions                                            |
-
-Pure SF Symbols, no color — the menu bar adapts to light/dark automatically.
-
-### 📋 Per-session dropdown with what each one is doing
-
-Click the menu bar icon to see one row per session, with the **AI-generated task summary** (the same one Claude Code shows in `/resume`):
-
-```text
-ASKING   Investigate menu icon display      (12s ago)
-WORKING  Refactor auth middleware           (3m  ago)
-WAITING  Plan database migration            (15m ago)
-```
-
-No more guessing which window has which conversation.
-
-### 🎯 Click to jump back to the right window
-
-Each row's click action takes you straight to that session — with **per-tab precision** when possible:
-
-| Where Claude Code is running | What happens on click                                      |
-| ---------------------------- | ---------------------------------------------------------- |
-| Terminal.app                 | Focus that specific tab (matched by tty)                   |
-| iTerm                        | Focus that specific session (matched by tty)               |
-| VS Code / Cursor / Windsurf  | Focus the workspace window for that project                |
-| Ghostty / Warp / Alacritty…  | Bring the app to front                                     |
-
-### 🔔 Per-session desktop notifications (opt-in)
-
-Don't want to glance? Get a macOS notification when a state transition happens — **configured per session, right from the dropdown**:
-
-```text
-WORKING  Refactor auth middleware           (3m ago)
-└ in my-project
-└ Open folder
-└ ─────
-└ Notify on:
-└ ✓ ASKING       ← only ping me when this session needs me
-└   WORKING
-└   WAITING
-```
-
-Two sessions in the same project? They keep independent notification preferences — one stays loud, the other stays quiet.
-
-Banners can carry the AI title in the body, and clicking the banner jumps back to the right window (when [`terminal-notifier`](https://github.com/julienXX/terminal-notifier) is installed: `brew install terminal-notifier`).
-
-### ⚡ Lightweight by design
-
-- **~5% of one CPU core** at 500ms refresh — well under 1% of your machine
-- **Stdlib-only Python** for the runtime — no `pip install` nightmare, no virtualenv to manage
-- **Tiny disk footprint**: 4 small files in `~/.claude/scripts/`
-- **One JSON config** — every knob in one place
-
----
-
-## Install
-
-```bash
-brew install --cask swiftbar              # if you don't have SwiftBar yet
-git clone https://github.com/<you>/claude-code-swiftbar
-cd claude-code-swiftbar
-./install.sh
-```
-
-That's it. Open a Claude Code session and watch the menu bar update.
-
-The installer is **idempotent** (safe to re-run), **non-destructive** (your existing hooks in `~/.claude/settings.json` are preserved), and **respects your customizations** (your config file is backed up before any update).
-
----
-
-## Customize
-
-Everything tunable lives in **one file**: `~/.claude/swiftbar-config.json`.
-
-The seed config sets sensible defaults for refresh interval, icons, hook routing, and notifications. Want a different SF Symbol for the menu bar? Want notifications to play a sound? Want to silence permission prompts? Edit the file, run `./install.sh` again, done.
-
-The most common knobs:
-
-| Setting              | What it does                                                                  |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `refresh_interval_ms`| How often the menu bar updates. Default 500ms. Floored at 100ms.              |
-| `icons`              | SF Symbol per state, used in the dropdown rows.                               |
-| `header_icons`       | Optional separate icons for the menu bar header (often simpler/template-ish). |
-| `notify_icons`       | Icons used in the per-session "Notify on:" toggles.                           |
-| `notifications.sound`| Play a system sound on banner. Off by default.                                |
-| `events`             | Which Claude Code hook event writes which state.                              |
-
-Full schema and field reference: [OVERVIEW.md](OVERVIEW.md).
-
----
-
-## Why a SwiftBar plugin?
-
-Several other macOS Claude Code menu bar apps exist (see [Related](#related-projects)). They're nice. They're also full apps you can't easily change. This one is **~700 lines of Python you can read in an afternoon and bend to your taste** — fork-friendly, hackable, and zero surprise behavior.
-
-If you live in SwiftBar already, this drops in next to your other plugins.
-
----
+- one row per active Claude Code or Codex CLI session
+- current state and elapsed time
+- transcript-derived summary when available
+- working directory shortcut
+- best-effort "Return to Tab" action for Terminal, iTerm, VS Code, Cursor,
+  Windsurf, Ghostty, Alacritty, and other detected host apps
+- per-session notification toggles
 
 ## Requirements
 
 - macOS
-- [SwiftBar](https://swiftbar.app)
-- [Claude Code](https://claude.com/claude-code)
-- `/usr/bin/python3` (system Python; ships with macOS)
+- SwiftBar installed at `/Applications/SwiftBar.app`
+- Claude Code and/or Codex CLI
+- `/usr/bin/python3` with Python 3.10 or newer
 
-Optional: [`terminal-notifier`](https://github.com/julienXX/terminal-notifier) for click-to-focus notification banners.
+Runtime code uses only the Python standard library. Development and asset
+generation use optional dependencies from `pyproject.toml`.
 
----
+Install SwiftBar with Homebrew if needed:
+
+```sh
+brew install --cask swiftbar
+```
+
+## Install
+
+Clone the repository, then run:
+
+```sh
+./install.sh
+```
+
+The installer auto-detects Claude Code and Codex CLI. You can force or skip
+either integration:
+
+```sh
+./install.sh --claude --no-codex
+./install.sh --codex --no-claude
+```
+
+If SwiftBar has no plugin folder configured, the installer defaults to:
+
+```text
+~/Documents/SwiftBar
+```
+
+To use another plugin directory for this install:
+
+```sh
+SWIFTBAR_PLUGIN_DIR="$HOME/Library/Application Support/SwiftBar/Plugins" ./install.sh
+```
+
+## Installed Files
+
+The installer writes these files:
+
+```text
+~/.claude/scripts/claudebar.py
+~/.claude/scripts/claude-swiftbar-hook.py
+~/.claude/scripts/claude-swiftbar-plugin.py
+~/.claude/scripts/claude-swiftbar-toggle.py
+~/.claude/swiftbar-config.json
+~/.claude/state/swiftbar/
+<SwiftBar plugin dir>/claude-status.<interval>.sh
+```
+
+It also patches hook configuration:
+
+```text
+~/.claude/settings.json
+~/.codex/hooks.json
+```
+
+Existing hook settings are backed up before patching and routes owned by other
+tools are left in place.
+
+## Configure
+
+Edit:
+
+```text
+~/.claude/swiftbar-config.json
+```
+
+Common settings:
+
+```json
+{
+  "refresh_interval_ms": 500,
+  "priority": ["asking", "working", "waiting"],
+  "icons": {
+    "asking": "exclamationmark.circle",
+    "working": "hourglass.circle",
+    "waiting": "checkmark.circle",
+    "none": "circle.dotted"
+  },
+  "notifications": {
+    "enabled_states": [],
+    "sound": false,
+    "sound_name": "Glass",
+    "include_summary": true
+  }
+}
+```
+
+Most changes are picked up on the next SwiftBar refresh. Changes to
+`refresh_interval_ms` also affect the SwiftBar plugin filename, so reinstall or
+rename the wrapper when changing the refresh cadence.
+
+Hook routing is configurable with `claude_events` and `codex_events`. Map an
+event to a state, or set it to `null` to disable that event:
+
+```json
+{
+  "claude_events": {
+    "UserPromptSubmit": "working",
+    "Notification": {
+      "permission_prompt": "asking",
+      "elicitation_dialog": "asking",
+      "idle_prompt": null
+    },
+    "Stop": "waiting",
+    "SessionEnd": "end"
+  },
+  "codex_events": {
+    "PermissionRequest": "asking",
+    "Stop": "waiting"
+  }
+}
+```
+
+After changing hook routing in the installed config, regenerate the matching
+hook file:
+
+```sh
+/usr/bin/python3 scripts/install_settings.py
+/usr/bin/python3 scripts/install_codex_hooks.py
+```
+
+`./install.sh` also runs these patchers, but it refreshes
+`~/.claude/swiftbar-config.json` from the repository template first and leaves
+the prior file as `~/.claude/swiftbar-config.json.bak`.
+
+## Notifications
+
+Notifications are off by default. Enable them globally by adding states to
+`notifications.enabled_states`, or use the SwiftBar dropdown checkboxes to opt
+in per session.
+
+When `terminal-notifier` is available, notifications use it for better macOS
+notification behavior and click-back support:
+
+```sh
+brew install terminal-notifier
+```
+
+Without `terminal-notifier`, the plugin falls back to `osascript`.
 
 ## Uninstall
 
-```bash
+```sh
 ./uninstall.sh
 ```
 
-Removes the plugin, the deployed scripts, and our entries in `settings.json`. Your config and per-session state files are left in place; the script tells you exactly what to delete if you want a clean slate.
+This removes the installed SwiftBar wrapper, deployed scripts, and Claude/Codex
+hook routes. It leaves state and config files in place.
 
----
+To remove those too:
 
-## Related projects
+```sh
+rm -rf ~/.claude/state/swiftbar
+rm -f ~/.claude/swiftbar-config.json
+```
 
-- [gmr/claude-status](https://github.com/gmr/claude-status) — full menu-bar app with desktop widget.
-- [VibeStatus](https://www.vibestatus.app) — closed-source paid app with push notifications.
-- [PiXeL16/claudecode-macmenu](https://github.com/PiXeL16/claudecode-macmenu) — menu-bar app with usage analytics.
+## Development
 
-This project is the **"small SwiftBar plugin you can hack on"** alternative.
+Install development dependencies:
 
----
+```sh
+uv sync --group dev
+```
+
+Run tests:
+
+```sh
+uv run pytest
+```
+
+Useful paths:
+
+```text
+lib/claudebar.py                  shared logic
+hook/claude-swiftbar-hook.py      hook entry point
+plugin/claude-status.py           SwiftBar renderer
+plugin/toggle.py                  notification toggle helper
+scripts/install_settings.py       Claude hook patcher
+scripts/install_codex_hooks.py    Codex hook patcher
+```
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
----
+## Troubleshooting
 
-## Architecture, internals, dev workflow
+If no icon appears:
 
-See [OVERVIEW.md](OVERVIEW.md) for repo layout, the hook → state-file → plugin pipeline, the full config schema, and how to run the test suite.
+- confirm SwiftBar is installed in `/Applications`
+- confirm SwiftBar has a plugin directory configured
+- run `./install.sh` again and then refresh SwiftBar
+- open a new Claude Code or Codex CLI session so hooks can write state
+
+If a stale session remains visible, it will be removed automatically when the
+agent process is gone or the state file becomes old enough. You can also clear
+state manually:
+
+```sh
+rm -rf ~/.claude/state/swiftbar
+```

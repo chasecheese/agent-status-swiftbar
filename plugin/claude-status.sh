@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# <bitbar.title>Claude Code Status</bitbar.title>
+# <bitbar.title>Agent Status</bitbar.title>
 # <bitbar.version>0.6</bitbar.version>
 # <bitbar.author>local</bitbar.author>
-# <bitbar.desc>Aggregate state across active Claude Code sessions.</bitbar.desc>
+# <bitbar.desc>Aggregate state across active Claude Code and Codex sessions.</bitbar.desc>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>

@@ -1,4 +1,4 @@
-"""Shared utilities for claude-code-swiftbar.
+"""Shared utilities for agent-status-swiftbar.
 
 Single source of truth for filesystem paths, default state taxonomy,
 process-tree introspection, transcript parsing, and config loading.

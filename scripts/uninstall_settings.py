@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove claude-code-swiftbar hooks from ~/.claude/settings.json."""
+"""Remove agent-status-swiftbar hooks from ~/.claude/settings.json."""
 from __future__ import annotations
 
 import json

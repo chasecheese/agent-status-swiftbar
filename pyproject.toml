@@ -1,7 +1,7 @@
 [project]
-name = "claude-code-swiftbar"
+name = "agent-status-swiftbar"
 version = "0.6.0"
-description = "SwiftBar plugin: macOS menu-bar status light for Claude Code sessions."
+description = "SwiftBar plugin: macOS menu-bar status light for Claude Code and Codex sessions."
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 # Runtime deps: none — all production code uses the stdlib only, so the

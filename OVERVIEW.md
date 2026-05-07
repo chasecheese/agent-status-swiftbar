@@ -1,4 +1,4 @@
-# claude-code-swiftbar
+# agent-status-swiftbar
 
 A tiny [SwiftBar](https://swiftbar.app) plugin that turns the macOS menu bar into a status light for [Claude Code](https://claude.com/claude-code) sessions.
 
@@ -31,8 +31,8 @@ If a Claude Code turn takes more than a few seconds you tab away. The menu bar t
 ## Install
 
 ```bash
-git clone https://github.com/<you>/claude-code-swiftbar
-cd claude-code-swiftbar
+git clone https://github.com/<you>/agent-status-swiftbar
+cd agent-status-swiftbar
 ./install.sh
 ```
 

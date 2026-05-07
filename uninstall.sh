@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove claude-code-swiftbar.
+# Remove agent-status-swiftbar.
 
 set -euo pipefail
 

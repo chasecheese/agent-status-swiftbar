@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install claude-code-swiftbar.
+# Install agent-status-swiftbar.
 #
 # Deploys (in order):
 #   ~/.claude/scripts/claudebar.py                  shared lib

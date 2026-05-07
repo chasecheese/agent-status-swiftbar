@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
-name = "claude-code-swiftbar"
+name = "agent-status-swiftbar"
 version = "0.6.0"
 source = { virtual = "." }
 
