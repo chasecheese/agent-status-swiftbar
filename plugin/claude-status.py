@@ -14,10 +14,24 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from claudebar import (  # noqa: E402
-    APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN, STATE_BRAND_LOGOS, STATE_LABELS,
-    SUMMARY_MAX_LEN, TOGGLE_PATH,
+    APP_BRAND_STATE_PILLS, APP_LOGOS, IDE_BIN, MESSAGE_MAX_LEN,
+    STATE_BRAND_LOGOS, STATE_LABELS, SUMMARY_MAX_LEN, TOGGLE_PATH,
     aggregate_state, effective_enabled_states, load_config, read_state_files,
 )
+
+
+def _lookup_ci(d: dict, key: str):
+    """Case-insensitive dict lookup. Older state files sometimes wrote the
+    host name in a different case than APP_LOGOS / APP_BRAND_STATE_PILLS
+    keys (e.g. `claude` vs `Claude`); normalize at read time."""
+    if not key:
+        return None
+    if key in d:
+        return d[key]
+    for k, v in d.items():
+        if k.lower() == key.lower():
+            return v
+    return None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,14 +159,26 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     tty = (r.get("tty") or "").strip()
     click = click_action(terminal_app, tty, cwd)
 
-    # 2-icon brand+state pill (template PNG, NSMenu auto-tints with the
-    # menu bar). Source is 96×48 (3×) so it stays sharp on Retina @2x and
-    # @3x. Display as 32×16 logical. Falls back to the plain state SF
-    # Symbol if the source isn't claude/codex.
-    pill = STATE_BRAND_LOGOS.get(source, {}).get(state)
+    # Row image — three priority tiers:
+    #   1) 3-icon (host + brand + state) full-colour pill, with light + dark
+    #      variants. SwiftBar's `image=<light>,<dark>` syntax picks one
+    #      based on the system Appearance, so we don't shell out per tick.
+    #      Source is 88×32 (2×); displayed at 44×16 logical.
+    #   2) 2-icon (brand + state) template pill — auto-tinted by NSMenu.
+    #      Source 96×48 (3×); displayed 32×16. Used when the host isn't in
+    #      our bundled APP_LOGOS set.
+    #   3) Plain state SF Symbol (config-driven), if the brand isn't
+    #      claude/codex either.
+    pill3 = _lookup_ci(APP_BRAND_STATE_PILLS, terminal_app)
+    pill3 = (pill3 or {}).get(source, {}).get(state)
+    pill2 = STATE_BRAND_LOGOS.get(source, {}).get(state)
     line = f"{label}  {summary_text}  ({age} ago)"
-    if pill:
-        params = [f"templateImage={pill} width=32 height=16"]
+    if pill3:
+        params = [
+            f"image={pill3['light']},{pill3['dark']} width=44 height=16",
+        ]
+    elif pill2:
+        params = [f"templateImage={pill2} width=32 height=16"]
     else:
         params = [f"sfimage={state_icon}"]
     if click:
