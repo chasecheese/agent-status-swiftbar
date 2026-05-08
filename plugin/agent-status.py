@@ -150,7 +150,6 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
                    or short_cwd or "(no cwd)"
     summary_text = truncate(summary_text, SUMMARY_MAX_LEN)
 
-    label = STATE_LABELS.get(state, state)
     age = humanage(now, r.get("since", 0))
     state_icon = icons.get(state, "circle")
     source = (r.get("source") or "claude").strip().lower()
@@ -160,11 +159,17 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     tty = (r.get("tty") or "").strip()
     click = click_action(terminal_app, tty, cwd)
 
-    # Row image — just the state SF Symbol. Composite PNG pills (host +
-    # brand + state) made the dropdown noticeably slower to open, so we
-    # let NSMenu render the symbol natively.
-    line = f"{label}  {summary_text}  ({age} ago)"
-    params = [f"sfimage={state_icon}"]
+    # Row image — brand logo (Claude/Codex) auto-tinted by NSMenu. The
+    # per-session state still needs to show, so we inline the state SF
+    # Symbol at the start of the label via SwiftBar's `:sf_symbol:`
+    # syntax (parsed by SwiftBar, rendered as a real SF Symbol next to
+    # the title — gives us two distinct icons on a single row).
+    brand_logo = SOURCE_LOGOS.get(source) or SOURCE_LOGOS.get("claude")
+    # Render the brand logo at 13×13 to roughly match the cap height of
+    # the inline `:sf_symbol:`; SwiftBar's :sf: glyph tracks the menu
+    # font size (~13pt), and a 16×16 PNG visibly overshoots it.
+    line = f":{state_icon}: {summary_text}  ({age} ago)"
+    params = [f"templateImage={brand_logo} width=13 height=13"]
     if click:
         params.append(click)
     elif cwd:
