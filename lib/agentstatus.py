@@ -903,7 +903,11 @@ def maybe_notify(new_state: str, prev_state: str, summary: str, cwd: str,
     if new_state not in enabled:
         return
 
-    title = f"Claude Code · {STATE_LABELS.get(new_state, new_state.upper())}"
+    source = (record.get("source") or "claude").strip().lower()
+    source_name = {"claude": "Claude Code", "codex": "Codex"}.get(
+        source, source.title() or "Agent",
+    )
+    title = f"{source_name} · {STATE_LABELS.get(new_state, new_state.upper())}"
     body = ""
     if notifications.get("include_summary", True):
         body = (summary or (Path(cwd).name if cwd else "")).strip()
