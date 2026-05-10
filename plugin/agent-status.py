@@ -203,10 +203,10 @@ def render_row(r: dict, now: int, icons: dict, priority: list[str],
     render_session_footer(source, session_id)
 
 
-# Width budget for the session-id row before we wrap to a continuation
-# row. 20 chars fits comfortably under the dropdown's natural width with
-# the brand logo to its left; a UUID (36 chars) wraps onto two lines.
-SID_CHUNK = 20
+# Wrap the session id onto a second row once it exceeds this width, so a
+# UUID (36 chars) breaks at its midpoint instead of trailing off the
+# dropdown's natural width.
+SID_WRAP = 20
 
 
 def render_session_footer(source: str, session_id: str) -> None:
@@ -219,8 +219,11 @@ def render_session_footer(source: str, session_id: str) -> None:
         return
     logo = SOURCE_LOGOS.get(source) or SOURCE_LOGOS.get("claude")
     print("-----")
-    chunks = [session_id[i:i + SID_CHUNK]
-              for i in range(0, len(session_id), SID_CHUNK)] or [""]
+    if len(session_id) > SID_WRAP:
+        mid = (len(session_id) + 1) // 2
+        chunks = [session_id[:mid], session_id[mid:]]
+    else:
+        chunks = [session_id]
     head, tail = chunks[0], chunks[1:]
     print(f"-- {head} | templateImage={logo} width=16 height=16 "
           f"color=gray size=11")
@@ -237,7 +240,7 @@ def main() -> None:
     print("---")
 
     if not records:
-        print("No active Claude Code sessions")
+        print("No active agent sessions")
     else:
         now = int(time.time())
         for r in records:
